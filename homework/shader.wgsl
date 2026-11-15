@@ -8,6 +8,7 @@ struct VertexOut {
     @builtin(position) clip_position: vec4f,
     @location(0) world_position: vec3f,
     @location(1) normal: vec3f,
+    @location(2) texcoord: vec2f,
 }
 
 struct CameraUniforms {
@@ -26,10 +27,14 @@ struct Immediates {
     albedo: vec3f,
     roughness: f32,
     specularFactor: f32,
+    hasTransparency: u32,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(1) @binding(0) var<uniform> lights: LightsUniforms;
+@group(2) @binding(0) var materialSampler: sampler;
+@group(2) @binding(1) var albedoTexture: texture_2d<f32>;
+@group(2) @binding(2) var transparencyTexture: texture_2d<f32>;
 
 var<immediate> immediates: Immediates;
 
@@ -39,7 +44,8 @@ fn vertexMain(in: VertexIn) -> VertexOut {
     return VertexOut(
         camera.viewProjection * world_position,
         world_position.xyz,
-        normalize((immediates.model * vec4f(in.normal, 0.0)).xyz)
+        normalize((immediates.model * vec4f(in.normal, 0.0)).xyz),
+        in.texcoord
     );
 }
 
@@ -60,7 +66,16 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
     let specularPower = 1.0 / max(0.0001, immediates.roughness * immediates.roughness) - 1.0;
     let cosine = max(0.0, dot(normal, lights.lightDirection));
 
-    let color = immediates.albedo * (lights.ambientIntensity + lights.lightIntensity * cosine)
+    let albedo = textureSample(albedoTexture, materialSampler, in.texcoord).rgb;
+
+    if (immediates.hasTransparency == 1u) {
+        let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
+        if (alpha < 0.5) {
+            discard;
+        }
+    }
+
+    let color = albedo * (lights.ambientIntensity + lights.lightIntensity * cosine)
         + lights.lightIntensity * immediates.specularFactor * (specularPower + 2.0) / (2.0 * PI) * pow(max(0.0, dot(halfway, normal)), specularPower);
 
     return vec4f(color, 1.0);

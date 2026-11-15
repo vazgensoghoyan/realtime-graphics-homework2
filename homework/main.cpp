@@ -39,6 +39,7 @@ struct Immediates
     math::vector3f albedo;
     float roughness;
     float specularFactor;
+    std::uint32_t hasTransparency; // bool
 };
 
 struct DebugDepthTextureImmediates
@@ -534,18 +535,24 @@ int main(int argc, char **argv) try {
         wgpuRenderPassEncoderSetBindGroup(renderPass, 0, cameraBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(renderPass, 1, lightsBindGroup, 0, nullptr);
 
-        Immediates const immediates {
+        Immediates immediates {
             .modelTranspose = math::transpose(model),
             .albedo = math::vector{1.f, 1.f, 1.f},
             .roughness = 0.05f,
             .specularFactor = 0.02f,
+            .hasTransparency = 0,
         };
         wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, vertexBuffer, 0, WGPU_WHOLE_SIZE);
         wgpuRenderPassEncoderSetIndexBuffer(renderPass, indexBuffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+
         for (const auto& submesh : scene.submeshes) {
             const auto& material = gpuMaterials[submesh.materialIndex];
             wgpuRenderPassEncoderSetBindGroup(renderPass, 2, material.bindGroup, 0, nullptr);
+
+            const auto& objMaterial = scene.materials[submesh.materialIndex];
+            immediates.hasTransparency = objMaterial.transparencyTexture.empty() ? 0u : 1u;
             wgpuRenderPassEncoderSetImmediates(renderPass, 0, &immediates, sizeof(immediates));
+
             wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
         }
 
