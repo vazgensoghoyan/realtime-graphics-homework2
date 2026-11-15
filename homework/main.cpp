@@ -6,6 +6,7 @@
 
 #include <webgpu.h>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <filesystem>
@@ -231,8 +232,12 @@ WGPURenderPipeline createDebugDepthTexturePipeline(WGPUDevice device, WGPUShader
     return renderPipeline;
 }
 
-int main() try {
-    WgpuApp app("Practice08", 1280, 720, true);
+int main(int argc, char **argv) try {
+    if (argc != 2) {
+        throw std::runtime_error("usage: homework2 <scene.obj>");
+    }
+
+    WgpuApp app("Homework 2", 1280, 720, false);
 
     WGPUBindGroupLayout cameraBindGroupLayout = createCameraBindGroupLayout(app.device());
     WGPUBindGroupLayout lightsBindGroupLayout = createLightsBindGroupLayout(app.device());
@@ -248,10 +253,18 @@ int main() try {
     WGPUBindGroup cameraBindGroup = createCameraBindGroup(app.device(), cameraBindGroupLayout, cameraUniformBuffer);
     WGPUBindGroup lightsBindGroup = createLightsBindGroup(app.device(), lightsBindGroupLayout, lightsUniformBuffer);
 
-    ObjMesh buddha = loadObj(projectRoot / "buddha.obj");
+    const char* scenePath = argv[1];
+    ObjMesh scene = loadObj(scenePath);
 
-    auto vertexBuffer = loadBuffer(app.device(), app.queue(), buddha.vertices, WGPUBufferUsage_Vertex);
-    auto indexBuffer = loadBuffer(app.device(), app.queue(), buddha.indices, WGPUBufferUsage_Index);
+    auto vertexBuffer = loadBuffer(app.device(), app.queue(), scene.vertices, WGPUBufferUsage_Vertex);
+    auto indexBuffer = loadBuffer(app.device(), app.queue(), scene.indices, WGPUBufferUsage_Index);
+
+    const auto center = math::center(scene.bounds);
+    const auto extent = math::diagonal(scene.bounds);
+    const float sceneScale = 2.f / std::max({extent[0], extent[1], extent[2]});
+    const math::matrix4f model =
+        math::scale(math::vector{sceneScale, sceneScale, sceneScale})
+        * math::translation(math::vector{-center[0], -center[1], -center[2]});
 
     WGPUTexture depthBuffer = nullptr;
     WGPUTextureView depthBufferView = nullptr;
@@ -259,7 +272,7 @@ int main() try {
     auto lastFrameStart = std::chrono::high_resolution_clock::now();
     float time = 0.f;
 
-    float camera_distance = 2.f;
+    float camera_distance = 2.5f;
     float camera_rotation = std::numbers::pi_v<float>;
     float camera_height = 0.5f;
 
@@ -325,7 +338,6 @@ int main() try {
         if (keydown.contains(SDLK_UP)) camera_distance += 7.f * dt;
         if (keydown.contains(SDLK_DOWN)) camera_distance -= 7.f * dt;
 
-        math::matrix4f const model = math::matrix4f::identity();
         math::matrix4f const view = math::translation(math::vector{0.f, 0.f, - camera_distance})
             * math::rotation_yz(std::numbers::pi_v<float> / 12.f)
             * math::rotation_xz(camera_rotation)
@@ -377,15 +389,17 @@ int main() try {
         wgpuRenderPassEncoderSetBindGroup(renderPass, 1, lightsBindGroup, 0, nullptr);
 
         Immediates const immediates {
-            .modelTranspose = math::matrix4f::identity(),
+            .modelTranspose = math::transpose(model),
             .albedo = math::vector{1.f, 1.f, 1.f},
             .roughness = 0.05f,
             .specularFactor = 0.02f,
         };
-        wgpuRenderPassEncoderSetImmediates(renderPass, 0, &immediates, sizeof(immediates));
         wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, vertexBuffer, 0, WGPU_WHOLE_SIZE);
         wgpuRenderPassEncoderSetIndexBuffer(renderPass, indexBuffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderDrawIndexed(renderPass, buddha.indices.size(), 1, 0, 0, 0);
+        for (const auto& submesh : scene.submeshes) {
+            wgpuRenderPassEncoderSetImmediates(renderPass, 0, &immediates, sizeof(immediates));
+            wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
+        }
 
         wgpuRenderPassEncoderEnd(renderPass);
         wgpuRenderPassEncoderRelease(renderPass);

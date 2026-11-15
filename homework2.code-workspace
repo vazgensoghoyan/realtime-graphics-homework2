@@ -30,7 +30,7 @@
         "command": "/bin/bash",
         "args": [
           "-c",
-          "cmake -E rm -rf build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=\"$HOME/.local\" -DWGPU_NATIVE_ROOT=\"$HOME/.local/opt/wgpu-native-29.0.1.1\" && cmake --build build --target homework2 --parallel \"$(nproc)\" && exec ./build/homework/homework2"
+          "cmake -E rm -rf build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=\"$HOME/.local\" -DWGPU_NATIVE_ROOT=\"$HOME/.local/opt/wgpu-native-29.0.1.1\" && cmake --build build --target homework2 --parallel \"$(nproc)\" && exec ./build/homework/homework2 homework/sponza/sponza.obj"
         ],
         "options": {
           "cwd": "${workspaceFolder:homework2}",
