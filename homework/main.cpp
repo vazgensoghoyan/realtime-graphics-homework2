@@ -33,6 +33,11 @@ struct LightsUniforms
     float padding2 = 0.f;
     math::vector3f lightIntensity;
     float padding3 = 0.f;
+
+    math::vector3f pointPosition;
+    float padding4 = 0.f;
+    math::vector3f pointIntensity;
+    float padding5 = 0.f;
 };
 
 struct Immediates
@@ -525,6 +530,12 @@ int main(int argc, char **argv) try {
 
         math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
 
+        const math::vector3f pointPosition {
+            0.6f * std::cos(time * 0.4f),
+            -0.1f + 0.15f * std::sin(time * 0.7f),
+            0.6f * std::sin(time * 0.4f),
+        };
+
         shadow.update(lightDirection, model, scene.bounds);
 
         CameraUniforms const cameraUniforms {
@@ -539,6 +550,8 @@ int main(int argc, char **argv) try {
             .ambientIntensity = {0.05f, 0.10f, 0.15f},
             .lightDirection = lightDirection,
             .lightIntensity = {0.8f, 0.6f, 0.4f},
+            .pointPosition = pointPosition,
+            .pointIntensity = {0.8f, 0.4f, 0.2f},
         };
 
         wgpuQueueWriteBuffer(app.queue(), lightsUniformBuffer, 0, &lightsUniforms, sizeof(lightsUniforms));

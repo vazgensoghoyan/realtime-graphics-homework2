@@ -21,6 +21,8 @@ struct LightsUniforms {
     ambientIntensity: vec3f,
     lightDirection: vec3f,
     lightIntensity: vec3f,
+    pointPosition: vec3f,
+    pointIntensity: vec3f,
 }
 
 struct Immediates {
@@ -89,6 +91,56 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
     return result / 9.0;
 }
 
+fn phongLight(
+    lightDirection: vec3f,
+    lightIntensity: vec3f,
+    normal: vec3f,
+    viewDirection: vec3f,
+    albedo: vec3f,
+    specularFactor: vec3f,
+    specularPower: f32
+) -> vec3f {
+    let cosine = max(dot(normal, lightDirection), 0.0);
+    let halfway = normalize(lightDirection + viewDirection);
+
+    var specular = vec3f(0.0);
+
+    if (cosine > 0.0) {
+        specular =
+            specularFactor * (specularPower + 2.0) / (2.0 * PI)
+            * pow(max(dot(halfway, normal), 0.0), specularPower);
+    }
+
+    return lightIntensity * (albedo * cosine + specular);
+}
+
+fn pointLight(
+    position: vec3f,
+    intensity: vec3f,
+    worldPosition: vec3f,
+    normal: vec3f,
+    viewDirection: vec3f,
+    albedo: vec3f,
+    specularFactor: vec3f,
+    specularPower: f32
+) -> vec3f {
+    let toLight = position - worldPosition;
+    let distanceSquared = max(dot(toLight, toLight), 0.01);
+
+    let lightDirection = normalize(toLight);
+    let attenuatedIntensity = intensity / distanceSquared;
+
+    return phongLight(
+        lightDirection,
+        attenuatedIntensity,
+        normal,
+        viewDirection,
+        albedo,
+        specularFactor,
+        specularPower
+    );
+}
+
 @fragment
 fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
     let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
@@ -97,21 +149,31 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
     }
 
     let normal = normalize(in.normal);
-
     let viewDirection = normalize(camera.position - in.worldPosition);
-    let halfway = normalize(lights.lightDirection + viewDirection);
-
-    let specular =
-        immediates.specular * (immediates.specularPower + 2.0) / (2.0 * PI)
-        * pow(max(0.0, dot(halfway, normal)), immediates.specularPower);
-
     let albedo = textureSample(albedoTexture, materialSampler, in.texcoord).rgb;
-
     let shadow = directionalShadow(in.worldPosition);
-    let directLight = lights.lightIntensity * shadow;
 
-    let cosine = max(0.0, dot(normal, lights.lightDirection));
-    let color = albedo * (lights.ambientIntensity + directLight * cosine) + directLight * specular;
+    let directionalColor = phongLight(
+        lights.lightDirection,
+        lights.lightIntensity * shadow,
+        normal,
+        viewDirection,
+        albedo,
+        immediates.specular,
+        immediates.specularPower
+    );
 
+    let pointColor = pointLight(
+        lights.pointPosition,
+        lights.pointIntensity,
+        in.worldPosition,
+        normal,
+        viewDirection,
+        albedo,
+        immediates.specular,
+        immediates.specularPower
+    );
+
+    let color = albedo * lights.ambientIntensity + directionalColor + pointColor;
     return vec4f(color, 1.0);
 }
