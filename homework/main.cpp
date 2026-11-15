@@ -48,12 +48,6 @@ struct Immediates
     float specularPower;
 };
 
-struct DebugDepthTextureImmediates
-{
-    math::vector2f center;
-    math::vector2f extent;
-};
-
 struct MaterialGpu {
     WGPUTexture albedoTexture;
     WGPUTextureView albedoTextureView;
@@ -281,48 +275,6 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shaderModu
     return renderPipeline;
 }
 
-WGPURenderPipeline createDebugDepthTexturePipeline(WGPUDevice device, WGPUShaderModule shaderModule, WGPUTextureFormat surfaceFormat,
-        WGPUBindGroupLayout lightsBindGroupLayout) {
-    WGPUBindGroupLayout bindGroupLayouts[1] = {
-        lightsBindGroupLayout,
-    };
-
-    WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
-    pipelineLayoutDescriptor.immediateSize = sizeof(DebugDepthTextureImmediates);
-    pipelineLayoutDescriptor.bindGroupLayouts = bindGroupLayouts;
-    pipelineLayoutDescriptor.bindGroupLayoutCount = std::size(bindGroupLayouts);
-
-    WGPUPipelineLayout pipelineLayout = wgpuDeviceCreatePipelineLayout(device, &pipelineLayoutDescriptor);
-
-    WGPUColorTargetState colorTargetState = WGPU_COLOR_TARGET_STATE_INIT;
-    colorTargetState.format = surfaceFormat;
-    colorTargetState.writeMask = WGPUColorWriteMask_All;
-
-    WGPUFragmentState fragmentState = WGPU_FRAGMENT_STATE_INIT;
-    fragmentState.module = shaderModule;
-    fragmentState.entryPoint = {"fragmentMain", WGPU_STRLEN};
-    fragmentState.targetCount = 1;
-    fragmentState.targets = &colorTargetState;
-
-    WGPUDepthStencilState depthStencilState = WGPU_DEPTH_STENCIL_STATE_INIT;
-    depthStencilState.format = WGPUTextureFormat_Depth24Plus;
-    depthStencilState.depthWriteEnabled = WGPUOptionalBool_False;
-    depthStencilState.depthCompare = WGPUCompareFunction_Always;
-
-    WGPURenderPipelineDescriptor renderPipelineDescriptor = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
-    renderPipelineDescriptor.layout = pipelineLayout;
-    renderPipelineDescriptor.vertex.module = shaderModule;
-    renderPipelineDescriptor.vertex.entryPoint = {"vertexMain", WGPU_STRLEN};
-    renderPipelineDescriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-    renderPipelineDescriptor.fragment = &fragmentState;
-    renderPipelineDescriptor.depthStencil = &depthStencilState;
-
-    WGPURenderPipeline renderPipeline = wgpuDeviceCreateRenderPipeline(device, &renderPipelineDescriptor);
-    wgpuPipelineLayoutRelease(pipelineLayout);
-
-    return renderPipeline;
-}
-
 WGPUTexture createTextureFromImage(WGPUDevice device, WGPUQueue queue, const Image& image) {
     WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
     descriptor.usage = WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding;
@@ -408,10 +360,7 @@ int main(int argc, char **argv) try {
     );
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
-    WGPUShaderModule debugDepthTextureShaderModule = createShaderModule(app.device(), projectRoot / "debug_depth_texture_shader.wgsl");
-
     WGPURenderPipeline renderPipeline = createPipeline(app.device(), shaderModule, app.surfaceFormat(), cameraBindGroupLayout, lightsBindGroupLayout, materialBindGroupLayout);
-    WGPURenderPipeline debugDepthTextureRenderPipeline = createDebugDepthTexturePipeline(app.device(), debugDepthTextureShaderModule, app.surfaceFormat(), lightsBindGroupLayout);
 
     WGPUBuffer cameraUniformBuffer = createBuffer(app.device(), sizeof(CameraUniforms), WGPUBufferUsage_Uniform);
     WGPUBuffer lightsUniformBuffer = createBuffer(app.device(), sizeof(LightsUniforms), WGPUBufferUsage_Uniform);
