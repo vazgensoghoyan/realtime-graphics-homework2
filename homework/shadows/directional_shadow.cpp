@@ -1,6 +1,6 @@
 #include "directional_shadow.hpp"
 
-#include <file_utils.hpp>
+#include <utils.hpp>
 
 #include <math/affine.hpp>
 #include <math/projection.hpp>
@@ -11,20 +11,6 @@ struct ShadowImmediates {
     math::matrix4f modelTranspose;
     math::matrix4f shadowProjectionTranspose;
 };
-
-WGPUShaderModule createShaderModule(
-    WGPUDevice device,
-    const std::filesystem::path& path
-) {
-    const auto source = loadFile(path);
-
-    WGPUShaderSourceWGSL shaderSource = WGPU_SHADER_SOURCE_WGSL_INIT;
-    shaderSource.code = {source.data(), source.size()};
-
-    WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
-    descriptor.nextInChain = &shaderSource.chain;
-    return wgpuDeviceCreateShaderModule(device, &descriptor);
-}
 
 WGPUTexture createTexture(WGPUDevice device, std::uint32_t size) {
     WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
@@ -45,7 +31,7 @@ WGPUTextureView createView(WGPUTexture texture) {
     return wgpuTextureCreateView(texture, &descriptor);
 }
 
-WGPUSampler createSampler(WGPUDevice device) {
+WGPUSampler createShadowSampler(WGPUDevice device) {
     WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
     descriptor.addressModeU = WGPUAddressMode_ClampToEdge;
     descriptor.addressModeV = WGPUAddressMode_ClampToEdge;
@@ -156,7 +142,7 @@ DirectionalShadow::DirectionalShadow(
 )
     : m_texture(createTexture(device, size))
     , m_view(createView(m_texture))
-    , m_sampler(createSampler(device))
+    , m_sampler(createShadowSampler(device))
     , m_shaderModule(createShaderModule(device, shaderPath))
     , m_pipeline(createPipeline(device, m_shaderModule, materialLayout))
 {}

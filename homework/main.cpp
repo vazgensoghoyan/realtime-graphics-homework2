@@ -1,12 +1,11 @@
 #include <wgpu_app.hpp>
-#include <file_utils.hpp>
-#include <image_utils.hpp>
 #include <obj_loader.hpp>
 #include <math/math.hpp>
+#include <utils.hpp>
 
 #include "camera.hpp"
 #include "light_marker.hpp"
-#include "point_light.hpp"
+// #include "point_light.hpp"
 #include "shadows/directional_shadow.hpp"
 
 #include <webgpu.h>
@@ -58,32 +57,6 @@ struct MaterialGpu {
 
     WGPUBindGroup bindGroup;
 };
-
-WGPUShaderModule createShaderModule(WGPUDevice device, std::filesystem::path const & path) {
-    auto const source = loadFile(path);
-
-    WGPUShaderSourceWGSL shaderSourceWGSL = WGPU_SHADER_SOURCE_WGSL_INIT;
-    shaderSourceWGSL.code = {source.data(), source.size()};
-
-    WGPUShaderModuleDescriptor shaderModuleDescriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
-    shaderModuleDescriptor.nextInChain = &shaderSourceWGSL.chain;
-
-    return wgpuDeviceCreateShaderModule(device, &shaderModuleDescriptor);
-}
-
-WGPUBuffer createBuffer(WGPUDevice device, std::size_t size, WGPUBufferUsage usage) {
-    WGPUBufferDescriptor bufferDescriptor = WGPU_BUFFER_DESCRIPTOR_INIT;
-    bufferDescriptor.size = size;
-    bufferDescriptor.usage = usage | WGPUBufferUsage_CopyDst;
-    return wgpuDeviceCreateBuffer(device, &bufferDescriptor);
-}
-
-template <typename T>
-WGPUBuffer loadBuffer(WGPUDevice device, WGPUQueue queue, std::vector<T> const & data, WGPUBufferUsage usage) {
-    auto buffer = createBuffer(device, data.size() * sizeof(T), usage);
-    wgpuQueueWriteBuffer(queue, buffer, 0, data.data(), data.size() * sizeof(T));
-    return buffer;
-}
 
 WGPUBindGroupLayout createCameraBindGroupLayout(WGPUDevice device) {
     WGPUBindGroupLayoutEntry entries[1] = {WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT};
@@ -276,64 +249,6 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shaderModu
     return renderPipeline;
 }
 
-WGPUTexture createTextureFromImage(WGPUDevice device, WGPUQueue queue, const Image& image) {
-    WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
-    descriptor.usage = WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding;
-    descriptor.dimension = WGPUTextureDimension_2D;
-    descriptor.size = {image.width, image.height, 1};
-    descriptor.format = WGPUTextureFormat_RGBA8Unorm;
-
-    WGPUTexture texture = wgpuDeviceCreateTexture(device, &descriptor);
-
-    WGPUTexelCopyTextureInfo destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
-    destination.texture = texture;
-    destination.aspect = WGPUTextureAspect_All;
-
-    WGPUTexelCopyBufferLayout layout = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
-    layout.bytesPerRow = image.width * 4;
-    layout.rowsPerImage = image.height;
-
-    WGPUExtent3D extent = WGPU_EXTENT_3D_INIT;
-    extent.width = image.width;
-    extent.height = image.height;
-
-    wgpuQueueWriteTexture(queue, &destination, image.pixels.get(), image.width * image.height * 4, &layout, &extent);
-
-    return texture;
-}
-
-WGPUTexture createTexture(WGPUDevice device, WGPUQueue queue, const std::filesystem::path& path) {
-    Image image = loadImage(path);
-
-    if (!image.pixels || image.width == 0 || image.height == 0) {
-        throw std::runtime_error("failed to load texture");
-    }
-
-    return createTextureFromImage(device, queue, image);
-}
-
-WGPUTexture createSolidTexture(WGPUDevice device, WGPUQueue queue, Image::Pixel pixel) {
-    Image image;
-    image.width = 1;
-    image.height = 1;
-    image.pixels = std::make_unique<Image::Pixel[]>(1);
-    image.pixels[0] = pixel;
-
-    return createTextureFromImage(device, queue, image);
-}
-
-WGPUSampler createSampler(WGPUDevice device) {
-    WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
-    descriptor.addressModeU = WGPUAddressMode_Repeat;
-    descriptor.addressModeV = WGPUAddressMode_Repeat;
-    descriptor.addressModeW = WGPUAddressMode_Repeat;
-    descriptor.magFilter = WGPUFilterMode_Linear;
-    descriptor.minFilter = WGPUFilterMode_Linear;
-    descriptor.mipmapFilter = WGPUMipmapFilterMode_Nearest;
-
-    return wgpuDeviceCreateSampler(device, &descriptor);
-}
-
 int main(int argc, char **argv) try {
     if (argc != 2) {
         throw std::runtime_error("usage: homework2 <scene.obj>");
@@ -360,9 +275,10 @@ int main(int argc, char **argv) try {
         cameraBindGroupLayout
     );
 
-    PointLight pointLight(
-        app.device()
-    );
+    // PointLight pointLight(
+    //     app.device(),
+    //     projectRoot / "point_light/point_shadow.wgsl"
+    // );
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
     WGPURenderPipeline renderPipeline = createPipeline(app.device(), shaderModule, app.surfaceFormat(), cameraBindGroupLayout, lightsBindGroupLayout, materialBindGroupLayout);
@@ -492,7 +408,7 @@ int main(int argc, char **argv) try {
 
         math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
 
-        pointLight.update(time);
+        // pointLight.update(time);
 
         shadow.update(lightDirection, model, scene.bounds);
 
@@ -508,8 +424,8 @@ int main(int argc, char **argv) try {
             .ambientIntensity = {0.05f, 0.10f, 0.15f},
             .lightDirection = lightDirection,
             .lightIntensity = {0.8f, 0.6f, 0.4f},
-            .pointPosition = pointLight.position(),
-            .pointIntensity = pointLight.intensity(),
+            // .pointPosition = pointLight.position(),
+            // .pointIntensity = pointLight.intensity(),
         };
 
         wgpuQueueWriteBuffer(app.queue(), lightsUniformBuffer, 0, &lightsUniforms, sizeof(lightsUniforms));
@@ -561,12 +477,12 @@ int main(int argc, char **argv) try {
             wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
         }
 
-        lightMarker.render(
-            renderPass,
-            cameraBindGroup,
-            pointLight.position(),
-            pointLight.intensity()
-        );
+        // lightMarker.render(
+        //     renderPass,
+        //     cameraBindGroup,
+        //     pointLight.position(),
+        //     pointLight.intensity()
+        // );
 
         wgpuRenderPassEncoderEnd(renderPass);
         wgpuRenderPassEncoderRelease(renderPass);

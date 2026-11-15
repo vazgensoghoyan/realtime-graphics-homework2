@@ -1,3 +1,4 @@
+add_subdirectory(utils)
 add_subdirectory(camera)
 add_subdirectory(light_marker)
 add_subdirectory(point_light)
@@ -12,6 +13,7 @@ target_link_libraries(homework2 PRIVATE
     light_marker
     point_light
     shadows
+    utils
 )
 
 target_compile_definitions(homework2 PRIVATE

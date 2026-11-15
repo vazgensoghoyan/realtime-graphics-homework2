@@ -4,4 +4,4 @@ add_library(shadows STATIC
 )
 
 target_include_directories(shadows PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(shadows PUBLIC math wgpu_app)
+target_link_libraries(shadows PUBLIC math wgpu_app utils)

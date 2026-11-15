@@ -1,6 +1,6 @@
 #include "light_marker.hpp"
 
-#include <file_utils.hpp>
+#include <utils.hpp>
 
 namespace {
 
@@ -10,21 +10,6 @@ struct Immediates {
     math::vector3f color;
     float padding2 = 0.f;
 };
-
-WGPUShaderModule createShaderModule(
-    WGPUDevice device,
-    const std::filesystem::path& path
-) {
-    const auto source = loadFile(path);
-
-    WGPUShaderSourceWGSL shaderSource = WGPU_SHADER_SOURCE_WGSL_INIT;
-    shaderSource.code = {source.data(), source.size()};
-
-    WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
-    descriptor.nextInChain = &shaderSource.chain;
-
-    return wgpuDeviceCreateShaderModule(device, &descriptor);
-}
 
 WGPURenderPipeline createPipeline(
     WGPUDevice device,
