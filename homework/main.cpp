@@ -4,6 +4,8 @@
 #include <obj_loader.hpp>
 #include <math/math.hpp>
 
+#include "camera.hpp"
+
 #include <webgpu.h>
 
 #include <algorithm>
@@ -11,8 +13,6 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
-#include <numbers>
-#include <unordered_set>
 
 static std::filesystem::path const projectRoot = PROJECT_ROOT;
 
@@ -238,6 +238,7 @@ int main(int argc, char **argv) try {
     }
 
     WgpuApp app("Homework 2", 1280, 720, false);
+    app.grab_mouse(true);
 
     WGPUBindGroupLayout cameraBindGroupLayout = createCameraBindGroupLayout(app.device());
     WGPUBindGroupLayout lightsBindGroupLayout = createLightsBindGroupLayout(app.device());
@@ -271,19 +272,15 @@ int main(int argc, char **argv) try {
 
     auto lastFrameStart = std::chrono::high_resolution_clock::now();
     float time = 0.f;
-
-    float camera_distance = 2.5f;
-    float camera_rotation = std::numbers::pi_v<float>;
-    float camera_height = 0.5f;
+    Camera camera;
 
     bool paused = false;
-
-    std::unordered_set<SDL_Keycode> keydown;
 
     bool running = true;
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            camera.handleEvent(event);
             switch (event.type) {
             case SDL_EVENT_QUIT:
                 running = false;
@@ -292,14 +289,16 @@ int main(int argc, char **argv) try {
                 app.resize(event.window.data1, event.window.data2);
                 break;
             case SDL_EVENT_KEY_DOWN:
-                keydown.insert(event.key.key);
+                if (event.key.key == SDLK_ESCAPE)
+                    running = false;
                 if (event.key.key == SDLK_SPACE)
                     paused ^= true;
                 break;
-            case SDL_EVENT_KEY_UP:
-                keydown.erase(event.key.key);
-                break;
             }
+        }   
+
+        if (!running) {
+            break;
         }
 
         std::optional<WGPUSurfaceTexture> surfaceTexture = app.beginFrame();
@@ -333,22 +332,16 @@ int main(int argc, char **argv) try {
         if (!paused) time += dt;
         lastFrameStart = now;
 
-        if (keydown.contains(SDLK_LEFT)) camera_rotation += 5.f * dt;
-        if (keydown.contains(SDLK_RIGHT)) camera_rotation -= 5.f * dt;
-        if (keydown.contains(SDLK_UP)) camera_distance += 7.f * dt;
-        if (keydown.contains(SDLK_DOWN)) camera_distance -= 7.f * dt;
+        camera.update(dt);
 
-        math::matrix4f const view = math::translation(math::vector{0.f, 0.f, - camera_distance})
-            * math::rotation_yz(std::numbers::pi_v<float> / 12.f)
-            * math::rotation_xz(camera_rotation)
-            * math::translation(math::vector{0.f, - camera_height, 0.f});
-        math::matrix4f const projection = math::perspective(std::numbers::pi_v<float> / 3.f, app.width() * 1.f / app.height(), 0.01f, 100.f);
+        math::matrix4f const view = camera.viewMatrix();
+        math::matrix4f const projection = camera.projectionMatrix(app.width() * 1.f / app.height());
 
         math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.5f), 1.f, std::sin(time * 0.5f)});
 
         CameraUniforms const cameraUniforms {
             .viewProjectionTranspose = math::transpose(projection * view),
-            .position = math::head<3>(math::inverse(view).value() * math::vector{0.f, 0.f, 0.f, 1.f}),
+            .position = camera.position(),
         };
 
         wgpuQueueWriteBuffer(app.queue(), cameraUniformBuffer, 0, &cameraUniforms, sizeof(cameraUniforms));
