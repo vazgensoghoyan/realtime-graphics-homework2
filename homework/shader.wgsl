@@ -67,14 +67,27 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
     }
 
     let uv = position.xy * vec2f(0.5, -0.5) + vec2f(0.5);
-    let storedDepth = textureSample(shadowTexture, shadowSampler, uv);
+
+    let textureSize = vec2f(textureDimensions(shadowTexture));
 
     let bias = 0.002;
 
-    if (position.z - bias > storedDepth) {
-        return 0.0;
+    let texelSize = vec2f(1.0) / textureSize;
+    let currentDepth = position.z - bias;
+
+    var result = 0.0;
+
+    for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+            let offset = vec2f(f32(x), f32(y)) * texelSize;
+            let storedDepth = textureSample(shadowTexture, shadowSampler, uv + offset);
+            if (currentDepth <= storedDepth) {
+                result += 1.0;
+            }
+        }
     }
-    return 1.0;
+
+    return result / 9.0;
 }
 
 @fragment

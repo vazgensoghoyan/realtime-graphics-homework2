@@ -520,7 +520,8 @@ int main(int argc, char **argv) try {
         math::matrix4f const view = camera.viewMatrix();
         math::matrix4f const projection = camera.projectionMatrix(app.width() * 1.f / app.height());
 
-        math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.5f), 1.f, std::sin(time * 0.5f)});
+        math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
+
         shadow.update(lightDirection, model, scene.bounds);
 
         CameraUniforms const cameraUniforms {

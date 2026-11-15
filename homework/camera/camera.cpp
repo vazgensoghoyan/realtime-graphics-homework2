@@ -21,7 +21,7 @@ void Camera::handleEvent(const SDL_Event& event) {
 }
 
 void Camera::update(float dt) {
-    const float step = (m_keydown.contains(SDLK_SPACE) ? s_fastSpeed : s_speed) * dt;
+    const float step = (m_keydown.contains(SDLK_LSHIFT) ? s_fastSpeed : s_speed) * dt;
 
     const math::vector3f forward{
         std::sin(m_yaw) * std::cos(m_pitch),
