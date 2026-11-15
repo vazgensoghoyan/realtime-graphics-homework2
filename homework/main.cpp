@@ -5,7 +5,7 @@
 
 #include "camera.hpp"
 #include "light_marker.hpp"
-// #include "point_light.hpp"
+#include "point_light.hpp"
 #include "shadows/directional_shadow.hpp"
 
 #include <webgpu.h>
@@ -275,10 +275,11 @@ int main(int argc, char **argv) try {
         cameraBindGroupLayout
     );
 
-    // PointLight pointLight(
-    //     app.device(),
-    //     projectRoot / "point_light/point_shadow.wgsl"
-    // );
+    PointLight pointLight(
+        app.device(),
+        projectRoot / "point_light/point_shadow.wgsl",
+        materialBindGroupLayout
+    );
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
     WGPURenderPipeline renderPipeline = createPipeline(app.device(), shaderModule, app.surfaceFormat(), cameraBindGroupLayout, lightsBindGroupLayout, materialBindGroupLayout);
@@ -408,7 +409,7 @@ int main(int argc, char **argv) try {
 
         math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
 
-        // pointLight.update(time);
+        pointLight.update(app.queue(), time);
 
         shadow.update(lightDirection, model, scene.bounds);
 
@@ -424,8 +425,8 @@ int main(int argc, char **argv) try {
             .ambientIntensity = {0.05f, 0.10f, 0.15f},
             .lightDirection = lightDirection,
             .lightIntensity = {0.8f, 0.6f, 0.4f},
-            // .pointPosition = pointLight.position(),
-            // .pointIntensity = pointLight.intensity(),
+            .pointPosition = pointLight.position(),
+            .pointIntensity = pointLight.intensity(),
         };
 
         wgpuQueueWriteBuffer(app.queue(), lightsUniformBuffer, 0, &lightsUniforms, sizeof(lightsUniforms));
@@ -434,7 +435,22 @@ int main(int argc, char **argv) try {
 
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(app.device(), nullptr);
 
-        shadow.render(encoder, vertexBuffer, indexBuffer, scene.submeshes, materialBindGroups);
+        shadow.render(
+            encoder,
+            vertexBuffer,
+            indexBuffer,
+            scene.submeshes,
+            materialBindGroups
+        );
+
+        pointLight.render(
+            encoder,
+            vertexBuffer,
+            indexBuffer,
+            scene.submeshes,
+            materialBindGroups,
+            model
+        );
 
         WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
         colorAttachment.view = targetView;
@@ -477,12 +493,12 @@ int main(int argc, char **argv) try {
             wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
         }
 
-        // lightMarker.render(
-        //     renderPass,
-        //     cameraBindGroup,
-        //     pointLight.position(),
-        //     pointLight.intensity()
-        // );
+        lightMarker.render(
+            renderPass,
+            cameraBindGroup,
+            pointLight.position(),
+            pointLight.intensity()
+        );
 
         wgpuRenderPassEncoderEnd(renderPass);
         wgpuRenderPassEncoderRelease(renderPass);

@@ -4,4 +4,4 @@ add_library(point_light STATIC
 )
 
 target_include_directories(point_light PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(point_light PUBLIC math wgpu_app)
+target_link_libraries(point_light PUBLIC math wgpu_app utils)
