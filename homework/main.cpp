@@ -36,9 +36,8 @@ struct LightsUniforms
 struct Immediates
 {
     math::matrix4f modelTranspose;
-    math::vector3f albedo;
-    float roughness;
-    float specularFactor;
+    math::vector3f specular;
+    float specularPower;
     std::uint32_t hasTransparency; // bool
 };
 
@@ -537,10 +536,6 @@ int main(int argc, char **argv) try {
 
         Immediates immediates {
             .modelTranspose = math::transpose(model),
-            .albedo = math::vector{1.f, 1.f, 1.f},
-            .roughness = 0.05f,
-            .specularFactor = 0.02f,
-            .hasTransparency = 0,
         };
         wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, vertexBuffer, 0, WGPU_WHOLE_SIZE);
         wgpuRenderPassEncoderSetIndexBuffer(renderPass, indexBuffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
@@ -551,6 +546,8 @@ int main(int argc, char **argv) try {
 
             const auto& objMaterial = scene.materials[submesh.materialIndex];
             immediates.hasTransparency = objMaterial.transparencyTexture.empty() ? 0u : 1u;
+            immediates.specular = objMaterial.specular;
+            immediates.specularPower = objMaterial.specularPower;
             wgpuRenderPassEncoderSetImmediates(renderPass, 0, &immediates, sizeof(immediates));
 
             wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);

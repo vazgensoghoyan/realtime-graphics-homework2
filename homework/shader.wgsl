@@ -24,9 +24,8 @@ struct LightsUniforms {
 
 struct Immediates {
     model: mat4x4f,
-    albedo: vec3f,
-    roughness: f32,
-    specularFactor: f32,
+    specular: vec3f,
+    specularPower: f32,
     hasTransparency: u32,
 }
 
@@ -51,23 +50,8 @@ fn vertexMain(in: VertexIn) -> VertexOut {
 
 const PI = 3.1415926535;
 
-fn computeLight(normal: vec3f, lightDirection: vec3f, lightIntensity: vec3f, viewDirection: vec3f) -> vec3f {
-    let halfway = normalize(lightDirection + viewDirection);
-    let power = 1.0 / max(0.0001, immediates.roughness * immediates.roughness) - 1.0;
-    return max(0.0, dot(normal, lightDirection)) * (1.0 + immediates.specularFactor * (power + 2.0) / (2.0 * PI) * pow(max(0.0, dot(halfway, normal)), power)) * lightIntensity;
-}
-
 @fragment
 fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
-    let normal = normalize(in.normal);
-
-    let viewDirection = normalize(camera.position - in.world_position);
-    let halfway = normalize(lights.lightDirection + viewDirection);
-    let specularPower = 1.0 / max(0.0001, immediates.roughness * immediates.roughness) - 1.0;
-    let cosine = max(0.0, dot(normal, lights.lightDirection));
-
-    let albedo = textureSample(albedoTexture, materialSampler, in.texcoord).rgb;
-
     if (immediates.hasTransparency == 1u) {
         let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
         if (alpha < 0.5) {
@@ -75,8 +59,19 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
         }
     }
 
-    let color = albedo * (lights.ambientIntensity + lights.lightIntensity * cosine)
-        + lights.lightIntensity * immediates.specularFactor * (specularPower + 2.0) / (2.0 * PI) * pow(max(0.0, dot(halfway, normal)), specularPower);
+    let normal = normalize(in.normal);
+
+    let viewDirection = normalize(camera.position - in.world_position);
+    let halfway = normalize(lights.lightDirection + viewDirection);
+
+    let specular =
+        immediates.specular * (immediates.specularPower + 2.0) / (2.0 * PI)
+        * pow(max(0.0, dot(halfway, normal)), immediates.specularPower);
+
+    let albedo = textureSample(albedoTexture, materialSampler, in.texcoord).rgb;
+
+    let cosine = max(0.0, dot(normal, lights.lightDirection));
+    let color = albedo * (lights.ambientIntensity + lights.lightIntensity * cosine) + lights.lightIntensity * specular;
 
     return vec4f(color, 1.0);
 }
