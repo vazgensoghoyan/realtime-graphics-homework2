@@ -11,6 +11,7 @@ public:
     DirectionalShadow(
         WGPUDevice device,
         const std::filesystem::path& shaderPath,
+        WGPUBindGroupLayout materialLayout,
         std::uint32_t size = 2048
     );
     ~DirectionalShadow();
@@ -25,7 +26,8 @@ public:
         WGPUCommandEncoder encoder,
         WGPUBuffer vertexBuffer,
         WGPUBuffer indexBuffer,
-        const std::vector<ObjSubmesh>& submeshes
+        const std::vector<ObjSubmesh>& submeshes,
+        const std::vector<WGPUBindGroup>& materialBindGroups
     );
 
     WGPUTextureView view() const { return m_view; }

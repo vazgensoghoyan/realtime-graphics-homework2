@@ -56,21 +56,34 @@ WGPUSampler createSampler(WGPUDevice device) {
     return wgpuDeviceCreateSampler(device, &descriptor);
 }
 
-WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shader) {
+WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shader, WGPUBindGroupLayout materialLayout) {
     WGPUPipelineLayoutDescriptor layoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
     layoutDescriptor.immediateSize = sizeof(ShadowImmediates);
+    layoutDescriptor.bindGroupLayoutCount = 1;
+    layoutDescriptor.bindGroupLayouts = &materialLayout;
     WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(device, &layoutDescriptor);
 
-    WGPUVertexAttribute attribute = WGPU_VERTEX_ATTRIBUTE_INIT;
-    attribute.offset = offsetof(ObjVertex, position);
-    attribute.shaderLocation = 0;
-    attribute.format = WGPUVertexFormat_Float32x3;
+    WGPUFragmentState fragmentState = WGPU_FRAGMENT_STATE_INIT;
+    fragmentState.module = shader;
+    fragmentState.entryPoint = {"fragmentMain", WGPU_STRLEN};
+
+    WGPUVertexAttribute attributes[2];
+
+    attributes[0] = WGPU_VERTEX_ATTRIBUTE_INIT;
+    attributes[0].offset = offsetof(ObjVertex, position);
+    attributes[0].shaderLocation = 0;
+    attributes[0].format = WGPUVertexFormat_Float32x3;
+
+    attributes[1] = WGPU_VERTEX_ATTRIBUTE_INIT;
+    attributes[1].offset = offsetof(ObjVertex, texcoord);
+    attributes[1].shaderLocation = 2;
+    attributes[1].format = WGPUVertexFormat_Float32x2;
 
     WGPUVertexBufferLayout vertexLayout = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
     vertexLayout.arrayStride = sizeof(ObjVertex);
     vertexLayout.stepMode = WGPUVertexStepMode_Vertex;
-    vertexLayout.attributeCount = 1;
-    vertexLayout.attributes = &attribute;
+    vertexLayout.attributeCount = std::size(attributes);
+    vertexLayout.attributes = attributes;
 
     WGPUDepthStencilState depthState = WGPU_DEPTH_STENCIL_STATE_INIT;
     depthState.format = WGPUTextureFormat_Depth24Plus;
@@ -85,6 +98,7 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shader) {
     descriptor.vertex.buffers = &vertexLayout;
     descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
     descriptor.primitive.cullMode = WGPUCullMode_Back;
+    descriptor.fragment = &fragmentState;
     descriptor.depthStencil = &depthState;
 
     WGPURenderPipeline result = wgpuDeviceCreateRenderPipeline(device, &descriptor);
@@ -137,13 +151,14 @@ math::matrix4f calculateProjection(
 DirectionalShadow::DirectionalShadow(
     WGPUDevice device,
     const std::filesystem::path& shaderPath,
+    WGPUBindGroupLayout materialLayout,
     std::uint32_t size
 )
     : m_texture(createTexture(device, size))
     , m_view(createView(m_texture))
     , m_sampler(createSampler(device))
     , m_shaderModule(createShaderModule(device, shaderPath))
-    , m_pipeline(createPipeline(device, m_shaderModule))
+    , m_pipeline(createPipeline(device, m_shaderModule, materialLayout))
 {}
 
 DirectionalShadow::~DirectionalShadow() {
@@ -167,7 +182,8 @@ void DirectionalShadow::render(
     WGPUCommandEncoder encoder,
     WGPUBuffer vertexBuffer,
     WGPUBuffer indexBuffer,
-    const std::vector<ObjSubmesh>& submeshes
+    const std::vector<ObjSubmesh>& submeshes,
+    const std::vector<WGPUBindGroup>& materialBindGroups
 ) {
     WGPURenderPassDepthStencilAttachment depthAttachment = WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
     depthAttachment.view = m_view;
@@ -193,6 +209,7 @@ void DirectionalShadow::render(
     wgpuRenderPassEncoderSetImmediates(pass, 0, &immediates, sizeof(immediates));
 
     for (const auto& submesh : submeshes) {
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, materialBindGroups[submesh.materialIndex], 0, nullptr);
         wgpuRenderPassEncoderDrawIndexed(pass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
     }
 

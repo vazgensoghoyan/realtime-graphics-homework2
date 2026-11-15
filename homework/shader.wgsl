@@ -27,7 +27,6 @@ struct Immediates {
     model: mat4x4f,
     specular: vec3f,
     specularPower: f32,
-    hasTransparency: u32,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
@@ -92,11 +91,9 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
 
 @fragment
 fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
-    if (immediates.hasTransparency == 1u) {
-        let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
-        if (alpha < 0.5) {
-            discard;
-        }
+    let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
+    if (alpha < 0.5) {
+        discard;
     }
 
     let normal = normalize(in.normal);

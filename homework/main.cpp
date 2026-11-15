@@ -40,7 +40,6 @@ struct Immediates
     math::matrix4f modelTranspose;
     math::vector3f specular;
     float specularPower;
-    std::uint32_t hasTransparency; // bool
 };
 
 struct DebugDepthTextureImmediates
@@ -384,14 +383,16 @@ int main(int argc, char **argv) try {
     WgpuApp app("Homework 2", 1280, 720, false);
     app.grab_mouse(true);
 
-    DirectionalShadow shadow(
-        app.device(),
-        projectRoot / "shadow_shader.wgsl"
-    );
-
     WGPUBindGroupLayout cameraBindGroupLayout = createCameraBindGroupLayout(app.device());
     WGPUBindGroupLayout lightsBindGroupLayout = createLightsBindGroupLayout(app.device());
     WGPUBindGroupLayout materialBindGroupLayout = createMaterialBindGroupLayout(app.device());
+
+    DirectionalShadow shadow(
+        app.device(),
+        projectRoot / "shadow_shader.wgsl",
+        materialBindGroupLayout,
+        4096
+    );
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
     WGPUShaderModule debugDepthTextureShaderModule = createShaderModule(app.device(), projectRoot / "debug_depth_texture_shader.wgsl");
@@ -416,6 +417,7 @@ int main(int argc, char **argv) try {
     WGPUTextureView fallbackTransparencyView = wgpuTextureCreateView(fallbackTransparency, nullptr);
 
     std::vector<MaterialGpu> gpuMaterials;
+    std::vector<WGPUBindGroup> materialBindGroups;
     for (const auto& material : scene.materials) {
         MaterialGpu materialGpu{};
 
@@ -438,6 +440,7 @@ int main(int argc, char **argv) try {
         materialGpu.bindGroup = createMaterialBindGroup(app.device(), materialBindGroupLayout, textureSampler, materialGpu);
 
         gpuMaterials.push_back(materialGpu);
+        materialBindGroups.push_back(materialGpu.bindGroup);
     }
 
     auto vertexBuffer = loadBuffer(app.device(), app.queue(), scene.vertices, WGPUBufferUsage_Vertex);
@@ -544,7 +547,7 @@ int main(int argc, char **argv) try {
 
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(app.device(), nullptr);
 
-        shadow.render(encoder, vertexBuffer, indexBuffer, scene.submeshes);
+        shadow.render(encoder, vertexBuffer, indexBuffer, scene.submeshes, materialBindGroups);
 
         WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
         colorAttachment.view = targetView;
@@ -580,7 +583,6 @@ int main(int argc, char **argv) try {
             wgpuRenderPassEncoderSetBindGroup(renderPass, 2, material.bindGroup, 0, nullptr);
 
             const auto& objMaterial = scene.materials[submesh.materialIndex];
-            immediates.hasTransparency = objMaterial.transparencyTexture.empty() ? 0u : 1u;
             immediates.specular = objMaterial.specular;
             immediates.specularPower = objMaterial.specularPower;
             wgpuRenderPassEncoderSetImmediates(renderPass, 0, &immediates, sizeof(immediates));
