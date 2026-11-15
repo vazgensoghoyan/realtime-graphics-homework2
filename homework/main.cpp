@@ -6,6 +6,7 @@
 
 #include "camera.hpp"
 #include "light_marker.hpp"
+#include "point_light.hpp"
 #include "shadows/directional_shadow.hpp"
 
 #include <webgpu.h>
@@ -359,6 +360,10 @@ int main(int argc, char **argv) try {
         cameraBindGroupLayout
     );
 
+    PointLight pointLight(
+        app.device()
+    );
+
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
     WGPURenderPipeline renderPipeline = createPipeline(app.device(), shaderModule, app.surfaceFormat(), cameraBindGroupLayout, lightsBindGroupLayout, materialBindGroupLayout);
 
@@ -487,11 +492,7 @@ int main(int argc, char **argv) try {
 
         math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
 
-        const math::vector3f pointPosition {
-            0.3f * std::cos(time * 0.4f),
-            -0.1f + 0.15f * std::sin(time * 0.7f),
-            0.3f * std::sin(time * 0.4f),
-        };
+        pointLight.update(time);
 
         shadow.update(lightDirection, model, scene.bounds);
 
@@ -507,8 +508,8 @@ int main(int argc, char **argv) try {
             .ambientIntensity = {0.05f, 0.10f, 0.15f},
             .lightDirection = lightDirection,
             .lightIntensity = {0.8f, 0.6f, 0.4f},
-            .pointPosition = pointPosition,
-            .pointIntensity = {0.4f, 0.2f, 0.1f},
+            .pointPosition = pointLight.position(),
+            .pointIntensity = pointLight.intensity(),
         };
 
         wgpuQueueWriteBuffer(app.queue(), lightsUniformBuffer, 0, &lightsUniforms, sizeof(lightsUniforms));
@@ -560,7 +561,12 @@ int main(int argc, char **argv) try {
             wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
         }
 
-        lightMarker.render(renderPass, cameraBindGroup, pointPosition, lightsUniforms.pointIntensity);
+        lightMarker.render(
+            renderPass,
+            cameraBindGroup,
+            pointLight.position(),
+            pointLight.intensity()
+        );
 
         wgpuRenderPassEncoderEnd(renderPass);
         wgpuRenderPassEncoderRelease(renderPass);
