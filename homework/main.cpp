@@ -41,6 +41,11 @@ struct Immediates
     std::uint32_t hasTransparency; // bool
 };
 
+struct ShadowImmediates {
+    math::matrix4f modelTranspose;
+    math::matrix4f shadowProjectionTranspose;
+};
+
 struct DebugDepthTextureImmediates
 {
     math::vector2f center;
@@ -251,6 +256,44 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shaderModu
     return renderPipeline;
 }
 
+WGPURenderPipeline createShadowPipeline(WGPUDevice device, WGPUShaderModule shaderModule) {
+    WGPUPipelineLayoutDescriptor layoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+    layoutDescriptor.immediateSize = sizeof(ShadowImmediates);
+
+    WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(device, &layoutDescriptor);
+
+    WGPUVertexAttribute attribute = WGPU_VERTEX_ATTRIBUTE_INIT;
+    attribute.offset = offsetof(ObjVertex, position);
+    attribute.shaderLocation = 0;
+    attribute.format = WGPUVertexFormat_Float32x3;
+
+    WGPUVertexBufferLayout vertexBufferLayout = WGPU_VERTEX_BUFFER_LAYOUT_INIT;
+    vertexBufferLayout.arrayStride = sizeof(ObjVertex);
+    vertexBufferLayout.attributeCount = 1;
+    vertexBufferLayout.attributes = &attribute;
+    vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+
+    WGPUDepthStencilState depthStencilState = WGPU_DEPTH_STENCIL_STATE_INIT;
+    depthStencilState.format = WGPUTextureFormat_Depth24Plus;
+    depthStencilState.depthWriteEnabled = WGPUOptionalBool_True;
+    depthStencilState.depthCompare = WGPUCompareFunction_Less;
+
+    WGPURenderPipelineDescriptor descriptor = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
+    descriptor.layout = layout;
+    descriptor.vertex.module = shaderModule;
+    descriptor.vertex.entryPoint = {"vertexMain", WGPU_STRLEN};
+    descriptor.vertex.buffers = &vertexBufferLayout;
+    descriptor.vertex.bufferCount = 1;
+    descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    descriptor.primitive.cullMode = WGPUCullMode_Back;
+    descriptor.depthStencil = &depthStencilState;
+
+    WGPURenderPipeline renderPipeline = wgpuDeviceCreateRenderPipeline(device, &descriptor);
+    wgpuPipelineLayoutRelease(layout);
+
+    return renderPipeline;
+}
+
 WGPURenderPipeline createDebugDepthTexturePipeline(WGPUDevice device, WGPUShaderModule shaderModule, WGPUTextureFormat surfaceFormat,
         WGPUBindGroupLayout lightsBindGroupLayout) {
     WGPUBindGroupLayout bindGroupLayouts[1] = {
@@ -339,11 +382,44 @@ WGPUTexture createSolidTexture(WGPUDevice device, WGPUQueue queue, Image::Pixel 
     return createTextureFromImage(device, queue, image);
 }
 
+WGPUTexture createShadowTexture(WGPUDevice device, std::uint32_t size) {
+    WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
+    descriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
+    descriptor.dimension = WGPUTextureDimension_2D;
+    descriptor.size = {size, size, 1};
+    descriptor.format = WGPUTextureFormat_Depth24Plus;
+
+    return wgpuDeviceCreateTexture(device, &descriptor);
+}
+
+WGPUTextureView createShadowView(WGPUTexture texture) {
+    WGPUTextureViewDescriptor descriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
+    descriptor.format = WGPUTextureFormat_Depth24Plus;
+    descriptor.dimension = WGPUTextureViewDimension_2D;
+    descriptor.mipLevelCount = 1;
+    descriptor.arrayLayerCount = 1;
+    descriptor.aspect = WGPUTextureAspect_DepthOnly;
+
+    return wgpuTextureCreateView(texture, &descriptor);
+}
+
 WGPUSampler createSampler(WGPUDevice device) {
     WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
     descriptor.addressModeU = WGPUAddressMode_Repeat;
     descriptor.addressModeV = WGPUAddressMode_Repeat;
     descriptor.addressModeW = WGPUAddressMode_Repeat;
+    descriptor.magFilter = WGPUFilterMode_Linear;
+    descriptor.minFilter = WGPUFilterMode_Linear;
+    descriptor.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+
+    return wgpuDeviceCreateSampler(device, &descriptor);
+}
+
+WGPUSampler createShadowSampler(WGPUDevice device) {
+    WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
+    descriptor.addressModeU = WGPUAddressMode_ClampToEdge;
+    descriptor.addressModeV = WGPUAddressMode_ClampToEdge;
+    descriptor.addressModeW = WGPUAddressMode_ClampToEdge;
     descriptor.magFilter = WGPUFilterMode_Linear;
     descriptor.minFilter = WGPUFilterMode_Linear;
     descriptor.mipmapFilter = WGPUMipmapFilterMode_Nearest;
@@ -359,14 +435,22 @@ int main(int argc, char **argv) try {
     WgpuApp app("Homework 2", 1280, 720, false);
     app.grab_mouse(true);
 
+    constexpr std::uint32_t shadowSize = 2048;
+
+    WGPUTexture shadowTexture = createShadowTexture(app.device(), shadowSize);
+    WGPUTextureView shadowView = createShadowView(shadowTexture);
+    WGPUSampler shadowSampler = createShadowSampler(app.device());
+
     WGPUBindGroupLayout cameraBindGroupLayout = createCameraBindGroupLayout(app.device());
     WGPUBindGroupLayout lightsBindGroupLayout = createLightsBindGroupLayout(app.device());
     WGPUBindGroupLayout materialBindGroupLayout = createMaterialBindGroupLayout(app.device());
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
+    WGPUShaderModule shadowShaderModule = createShaderModule(app.device(), projectRoot / "shadow_shader.wgsl");
     WGPUShaderModule debugDepthTextureShaderModule = createShaderModule(app.device(), projectRoot / "debug_depth_texture_shader.wgsl");
 
     WGPURenderPipeline renderPipeline = createPipeline(app.device(), shaderModule, app.surfaceFormat(), cameraBindGroupLayout, lightsBindGroupLayout, materialBindGroupLayout);
+    WGPURenderPipeline shadowRenderPipeline = createShadowPipeline(app.device(), shadowShaderModule);
     WGPURenderPipeline debugDepthTextureRenderPipeline = createDebugDepthTexturePipeline(app.device(), debugDepthTextureShaderModule, app.surfaceFormat(), lightsBindGroupLayout);
 
     WGPUBuffer cameraUniformBuffer = createBuffer(app.device(), sizeof(CameraUniforms), WGPUBufferUsage_Uniform);
@@ -511,6 +595,38 @@ int main(int argc, char **argv) try {
 
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(app.device(), nullptr);
 
+        {
+            WGPURenderPassDepthStencilAttachment depthStencilAttachment = WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
+            depthStencilAttachment.view = shadowView;
+            depthStencilAttachment.depthLoadOp = WGPULoadOp_Clear;
+            depthStencilAttachment.depthStoreOp = WGPUStoreOp_Store;
+            depthStencilAttachment.depthClearValue = 1.f;
+            depthStencilAttachment.depthReadOnly = WGPU_FALSE;
+
+            WGPURenderPassDescriptor renderPassDescriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+            renderPassDescriptor.depthStencilAttachment = &depthStencilAttachment;
+
+            WGPURenderPassEncoder shadowRenderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDescriptor);
+
+            wgpuRenderPassEncoderSetPipeline(shadowRenderPass, shadowRenderPipeline);
+
+            wgpuRenderPassEncoderSetVertexBuffer(shadowRenderPass, 0, vertexBuffer, 0, WGPU_WHOLE_SIZE);
+            wgpuRenderPassEncoderSetIndexBuffer(shadowRenderPass, indexBuffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+
+            ShadowImmediates immediates {
+                .modelTranspose = math::transpose(model),
+                .shadowProjectionTranspose = math::matrix4f::identity(),
+            };
+            wgpuRenderPassEncoderSetImmediates(shadowRenderPass, 0, &immediates, sizeof(immediates));
+
+            for (const auto& submesh : scene.submeshes) {
+                wgpuRenderPassEncoderDrawIndexed(shadowRenderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
+            }
+
+            wgpuRenderPassEncoderEnd(shadowRenderPass);
+            wgpuRenderPassEncoderRelease(shadowRenderPass);
+        }
+
         WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
         colorAttachment.view = targetView;
         colorAttachment.loadOp = WGPULoadOp_Clear;
@@ -576,6 +692,10 @@ int main(int argc, char **argv) try {
 
     wgpuRenderPipelineRelease(renderPipeline);
     wgpuShaderModuleRelease(shaderModule);
+
+    wgpuSamplerRelease(shadowSampler);
+    wgpuTextureViewRelease(shadowView);
+    wgpuTextureRelease(shadowTexture);
 } catch (const std::exception &e) {
     std::cerr << "error: " << e.what() << std::endl;
     return EXIT_FAILURE;
