@@ -1,0 +1,51 @@
+{
+  "folders": [
+    { "name": "homework2", "path": "." }
+  ],
+  "extensions": {
+    "recommendations": ["actboy168.tasks"]
+  },
+  "settings": {
+    "cmake.sourceDirectory": "${workspaceFolder:homework2}",
+    "cmake.buildDirectory": "${workspaceFolder:homework2}/build",
+    "cmake.configureSettings": {
+      "CMAKE_BUILD_TYPE": "Debug",
+      "CMAKE_PREFIX_PATH": "${env:HOME}/.local",
+      "WGPU_NATIVE_ROOT": "${env:HOME}/.local/opt/wgpu-native-29.0.1.1"
+    },
+    "C_Cpp.default.compileCommands": "${workspaceFolder:homework2}/build/compile_commands.json",
+    "tasks.statusbar.limit": 1
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "presentation": {
+      "reveal": "always",
+      "panel": "dedicated",
+      "clear": true
+    },
+    "tasks": [
+      {
+        "label": "Build and run Homework 2",
+        "type": "process",
+        "command": "/bin/bash",
+        "args": [
+          "-c",
+          "cmake -E rm -rf build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=\"$HOME/.local\" -DWGPU_NATIVE_ROOT=\"$HOME/.local/opt/wgpu-native-29.0.1.1\" && cmake --build build --target homework2 --parallel \"$(nproc)\" && exec ./build/homework/homework2"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder:homework2}",
+          "statusbar": {
+            "hide": false,
+            "label": "$(play) Homework 2",
+            "detail": "Fresh configure, build, and run"
+          }
+        },
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": ["$gcc"]
+      }
+    ]
+  }
+}

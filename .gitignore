@@ -10,3 +10,4 @@ cpp/cmake-build-*/
 cpp/build/
 rust/target/
 
+build/

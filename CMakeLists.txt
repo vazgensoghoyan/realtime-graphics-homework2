@@ -8,7 +8,4 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(math)
 add_subdirectory(wgpu_app)
-
-include(cmake/AddPractice.cmake)
-
 add_subdirectory(homework)
