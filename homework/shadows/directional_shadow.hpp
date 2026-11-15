@@ -30,6 +30,7 @@ public:
 
     WGPUTextureView view() const { return m_view; }
     WGPUSampler sampler() const { return m_sampler; }
+    math::matrix4f projection() const { return m_projection; }
 
 private:
     WGPUTexture m_texture;

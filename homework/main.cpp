@@ -26,6 +26,7 @@ struct CameraUniforms
 
 struct LightsUniforms
 {
+    math::matrix4f shadowProjectionTranspose;
     math::vector3f ambientIntensity;
     float padding = 0.f;
     math::vector3f lightDirection;
@@ -85,27 +86,40 @@ WGPUBuffer loadBuffer(WGPUDevice device, WGPUQueue queue, std::vector<T> const &
 }
 
 WGPUBindGroupLayout createCameraBindGroupLayout(WGPUDevice device) {
-    WGPUBindGroupLayoutEntry layoutEntries[1] = {WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT};
-    layoutEntries[0].binding = 0;
-    layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
-    layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
+    WGPUBindGroupLayoutEntry entries[1] = {WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT};
+    entries[0].binding = 0;
+    entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+    entries[0].buffer.type = WGPUBufferBindingType_Uniform;
 
     WGPUBindGroupLayoutDescriptor bindGroupLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-    bindGroupLayoutDescriptor.entries = layoutEntries;
-    bindGroupLayoutDescriptor.entryCount = std::size(layoutEntries);
+    bindGroupLayoutDescriptor.entries = entries;
+    bindGroupLayoutDescriptor.entryCount = std::size(entries);
 
     return wgpuDeviceCreateBindGroupLayout(device, &bindGroupLayoutDescriptor);
 }
 
 WGPUBindGroupLayout createLightsBindGroupLayout(WGPUDevice device) {
-    WGPUBindGroupLayoutEntry layoutEntries[1] = {WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT};
-    layoutEntries[0].binding = 0;
-    layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
-    layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
+    WGPUBindGroupLayoutEntry entries[3];
+
+    entries[0] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+    entries[0].binding = 0;
+    entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+    entries[0].buffer.type = WGPUBufferBindingType_Uniform;
+
+    entries[1] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+    entries[1].binding = 1;
+    entries[1].visibility = WGPUShaderStage_Fragment;
+    entries[1].texture.sampleType = WGPUTextureSampleType_Depth;
+    entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+    entries[2] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+    entries[2].binding = 2;
+    entries[2].visibility = WGPUShaderStage_Fragment;
+    entries[2].sampler.type = WGPUSamplerBindingType_Filtering;
 
     WGPUBindGroupLayoutDescriptor bindGroupLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-    bindGroupLayoutDescriptor.entries = layoutEntries;
-    bindGroupLayoutDescriptor.entryCount = std::size(layoutEntries);
+    bindGroupLayoutDescriptor.entries = entries;
+    bindGroupLayoutDescriptor.entryCount = std::size(entries);
 
     return wgpuDeviceCreateBindGroupLayout(device, &bindGroupLayoutDescriptor);
 }
@@ -151,11 +165,21 @@ WGPUBindGroup createCameraBindGroup(WGPUDevice device, WGPUBindGroupLayout bindG
     return wgpuDeviceCreateBindGroup(device, &bindGroupDescriptor);
 }
 
-WGPUBindGroup createLightsBindGroup(WGPUDevice device, WGPUBindGroupLayout bindGroupLayout, WGPUBuffer uniformBuffer) {
-    WGPUBindGroupEntry entries[1] = {WGPU_BIND_GROUP_ENTRY_INIT};
+WGPUBindGroup createLightsBindGroup(WGPUDevice device, WGPUBindGroupLayout bindGroupLayout, WGPUBuffer uniformBuffer, WGPUTextureView shadowView, WGPUSampler shadowSampler) {
+    WGPUBindGroupEntry entries[3];
+
+    entries[0] = WGPU_BIND_GROUP_ENTRY_INIT;
     entries[0].binding = 0;
     entries[0].buffer = uniformBuffer;
     entries[0].size = WGPU_WHOLE_SIZE;
+
+    entries[1] = WGPU_BIND_GROUP_ENTRY_INIT;
+    entries[1].binding = 1;
+    entries[1].textureView = shadowView;
+
+    entries[2] = WGPU_BIND_GROUP_ENTRY_INIT;
+    entries[2].binding = 2;
+    entries[2].sampler = shadowSampler;
 
     WGPUBindGroupDescriptor bindGroupDescriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
     bindGroupDescriptor.layout = bindGroupLayout;
@@ -378,7 +402,7 @@ int main(int argc, char **argv) try {
     WGPUBuffer cameraUniformBuffer = createBuffer(app.device(), sizeof(CameraUniforms), WGPUBufferUsage_Uniform);
     WGPUBuffer lightsUniformBuffer = createBuffer(app.device(), sizeof(LightsUniforms), WGPUBufferUsage_Uniform);
     WGPUBindGroup cameraBindGroup = createCameraBindGroup(app.device(), cameraBindGroupLayout, cameraUniformBuffer);
-    WGPUBindGroup lightsBindGroup = createLightsBindGroup(app.device(), lightsBindGroupLayout, lightsUniformBuffer);
+    WGPUBindGroup lightsBindGroup = createLightsBindGroup(app.device(), lightsBindGroupLayout, lightsUniformBuffer, shadow.view(), shadow.sampler());
 
     const char* scenePath = argv[1];
     ObjMesh scene = loadObj(scenePath);
@@ -506,7 +530,8 @@ int main(int argc, char **argv) try {
 
         wgpuQueueWriteBuffer(app.queue(), cameraUniformBuffer, 0, &cameraUniforms, sizeof(cameraUniforms));
 
-        LightsUniforms const lightsUniforms {
+        const LightsUniforms lightsUniforms {
+            .shadowProjectionTranspose = math::transpose(shadow.projection()),
             .ambientIntensity = {0.05f, 0.10f, 0.15f},
             .lightDirection = lightDirection,
             .lightIntensity = {0.8f, 0.6f, 0.4f},

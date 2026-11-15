@@ -5,8 +5,8 @@ struct VertexIn {
 }
 
 struct VertexOut {
-    @builtin(position) clip_position: vec4f,
-    @location(0) world_position: vec3f,
+    @builtin(position) clipPosition: vec4f,
+    @location(0) worldPosition: vec3f,
     @location(1) normal: vec3f,
     @location(2) texcoord: vec2f,
 }
@@ -17,6 +17,7 @@ struct CameraUniforms {
 }
 
 struct LightsUniforms {
+    shadowProjection: mat4x4f,
     ambientIntensity: vec3f,
     lightDirection: vec3f,
     lightIntensity: vec3f,
@@ -31,6 +32,8 @@ struct Immediates {
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 @group(1) @binding(0) var<uniform> lights: LightsUniforms;
+@group(1) @binding(1) var shadowTexture: texture_depth_2d;
+@group(1) @binding(2) var shadowSampler: sampler;
 @group(2) @binding(0) var materialSampler: sampler;
 @group(2) @binding(1) var albedoTexture: texture_2d<f32>;
 @group(2) @binding(2) var transparencyTexture: texture_2d<f32>;
@@ -39,16 +42,40 @@ var<immediate> immediates: Immediates;
 
 @vertex
 fn vertexMain(in: VertexIn) -> VertexOut {
-    let world_position = immediates.model * vec4f(in.position, 1.0);
+    let worldPosition = immediates.model * vec4f(in.position, 1.0);
     return VertexOut(
-        camera.viewProjection * world_position,
-        world_position.xyz,
+        camera.viewProjection * worldPosition,
+        worldPosition.xyz,
         normalize((immediates.model * vec4f(in.normal, 0.0)).xyz),
         in.texcoord
     );
 }
 
 const PI = 3.1415926535;
+
+fn directionalShadow(worldPosition: vec3f) -> f32 {
+    var position = lights.shadowProjection * vec4f(worldPosition, 1.0);
+    position /= position.w;
+
+    if (
+        abs(position.x) > 1.0 ||
+        abs(position.y) > 1.0 ||
+        position.z < 0.0 ||
+        position.z > 1.0
+    ) {
+        return 1.0;
+    }
+
+    let uv = position.xy * vec2f(0.5, -0.5) + vec2f(0.5);
+    let storedDepth = textureSample(shadowTexture, shadowSampler, uv);
+
+    let bias = 0.002;
+
+    if (position.z - bias > storedDepth) {
+        return 0.0;
+    }
+    return 1.0;
+}
 
 @fragment
 fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
@@ -61,7 +88,7 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
 
     let normal = normalize(in.normal);
 
-    let viewDirection = normalize(camera.position - in.world_position);
+    let viewDirection = normalize(camera.position - in.worldPosition);
     let halfway = normalize(lights.lightDirection + viewDirection);
 
     let specular =
@@ -70,8 +97,11 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
 
     let albedo = textureSample(albedoTexture, materialSampler, in.texcoord).rgb;
 
+    let shadow = directionalShadow(in.worldPosition);
+    let directLight = lights.lightIntensity * shadow;
+
     let cosine = max(0.0, dot(normal, lights.lightDirection));
-    let color = albedo * (lights.ambientIntensity + lights.lightIntensity * cosine) + lights.lightIntensity * specular;
+    let color = albedo * (lights.ambientIntensity + directLight * cosine) + directLight * specular;
 
     return vec4f(color, 1.0);
 }
