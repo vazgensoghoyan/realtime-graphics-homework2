@@ -4,7 +4,7 @@
 #include <math/projection.hpp>
 #include <math/utils.hpp>
 
-void Camera::handleEvent(SDL_Event const & event) {
+void Camera::handleEvent(const SDL_Event& event) {
     switch (event.type) {
     case SDL_EVENT_KEY_DOWN:
         m_keydown.insert(event.key.key);
