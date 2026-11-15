@@ -5,6 +5,7 @@
 #include <math/math.hpp>
 
 #include "camera.hpp"
+#include "light_marker.hpp"
 #include "shadows/directional_shadow.hpp"
 
 #include <webgpu.h>
@@ -394,9 +395,16 @@ int main(int argc, char **argv) try {
 
     DirectionalShadow shadow(
         app.device(),
-        projectRoot / "shadow_shader.wgsl",
+        projectRoot / "shadows/shadow_shader.wgsl",
         materialBindGroupLayout,
         4096
+    );
+
+    LightMarker lightMarker(
+        app.device(),
+        projectRoot / "light_marker/light_marker.wgsl",
+        app.surfaceFormat(),
+        cameraBindGroupLayout
     );
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
@@ -531,9 +539,9 @@ int main(int argc, char **argv) try {
         math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
 
         const math::vector3f pointPosition {
-            0.6f * std::cos(time * 0.4f),
+            0.3f * std::cos(time * 0.4f),
             -0.1f + 0.15f * std::sin(time * 0.7f),
-            0.6f * std::sin(time * 0.4f),
+            0.3f * std::sin(time * 0.4f),
         };
 
         shadow.update(lightDirection, model, scene.bounds);
@@ -551,7 +559,7 @@ int main(int argc, char **argv) try {
             .lightDirection = lightDirection,
             .lightIntensity = {0.8f, 0.6f, 0.4f},
             .pointPosition = pointPosition,
-            .pointIntensity = {0.8f, 0.4f, 0.2f},
+            .pointIntensity = {0.4f, 0.2f, 0.1f},
         };
 
         wgpuQueueWriteBuffer(app.queue(), lightsUniformBuffer, 0, &lightsUniforms, sizeof(lightsUniforms));
@@ -602,6 +610,8 @@ int main(int argc, char **argv) try {
 
             wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
         }
+
+        lightMarker.render(renderPass, cameraBindGroup, pointPosition, lightsUniforms.pointIntensity);
 
         wgpuRenderPassEncoderEnd(renderPass);
         wgpuRenderPassEncoderRelease(renderPass);
