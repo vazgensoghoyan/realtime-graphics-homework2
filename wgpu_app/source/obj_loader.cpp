@@ -1,9 +1,11 @@
 #include <obj_loader.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstdint>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -50,6 +52,11 @@ std::string readFile(std::filesystem::path const & path) {
     file.seekg(0);
     file.read(contents.data(), static_cast<std::streamsize>(contents.size()));
     return contents;
+}
+
+std::string normalizePath(std::string path) {
+    std::replace(path.begin(), path.end(), '\\', '/');
+    return path;
 }
 
 bool isSpace(char c) {
@@ -132,6 +139,77 @@ std::uint32_t resolveIndex(int index, std::size_t size, std::size_t lineNumber) 
     return static_cast<std::uint32_t>(resolved);
 }
 
+void finishSubmesh(ObjMesh& mesh, std::uint32_t materialIndex) {
+    if (mesh.submeshes.empty() || mesh.submeshes.back().materialIndex != materialIndex) {
+        mesh.submeshes.push_back({
+            static_cast<std::uint32_t>(mesh.indices.size()),
+            0,
+            materialIndex,
+        });
+    }
+}
+
+void loadMtl(
+    const std::filesystem::path& path,
+    ObjMesh& mesh,
+    std::unordered_map<std::string, std::uint32_t>& materialIndices
+) {
+    std::istringstream lines(readFile(path));
+    std::string line;
+    ObjMaterial *current = nullptr;
+    std::size_t lineNumber = 0;
+
+    while (std::getline(lines, line)) {
+        ++lineNumber;
+        std::istringstream stream(line);
+        std::string command;
+        stream >> command;
+        if (command.empty() || command[0] == '#') {
+            continue;
+        }
+
+        if (command == "newmtl") {
+            std::string name;
+            stream >> name;
+            if (name.empty()) {
+                fail("invalid MTL material", lineNumber);
+            }
+
+            auto const [it, inserted] = materialIndices.emplace(name, static_cast<std::uint32_t>(mesh.materials.size()));
+            if (!inserted) {
+                fail("duplicate MTL material", lineNumber);
+            }
+
+            mesh.materials.push_back({});
+            current = &mesh.materials.back();
+            current->name = name;
+        } else if (current == nullptr) {
+            fail("MTL property before newmtl", lineNumber);
+        } else if (command == "map_Ka" || command == "map_d") {
+            std::string texturePath;
+            stream >> texturePath;
+            if (texturePath.empty()) {
+                fail("invalid MTL texture path", lineNumber);
+            }
+
+            auto const resolved = path.parent_path() / normalizePath(texturePath);
+            if (command == "map_Ka") {
+                current->albedoTexture = resolved;
+            } else {
+                current->transparencyTexture = resolved;
+            }
+        } else if (command == "Ks") {
+            if (!(stream >> current->specular.x() >> current->specular.y() >> current->specular.z())) {
+                fail("invalid MTL Ks", lineNumber);
+            }
+        } else if (command == "Ns") {
+            if (!(stream >> current->specularPower)) {
+                fail("invalid MTL Ns", lineNumber);
+            }
+        }
+    }
+}
+
 }  // namespace
 
 ObjMesh loadObj(std::filesystem::path const & path) {
@@ -141,7 +219,12 @@ ObjMesh loadObj(std::filesystem::path const & path) {
     std::vector<math::vector2f> texcoords;
     std::vector<math::vector3f> normals;
     std::unordered_map<VertexKey, std::uint32_t, VertexKeyHash> unique;
+    std::unordered_map<std::string, std::uint32_t> materialIndices;
     ObjMesh mesh;
+
+    mesh.materials.push_back({});
+    materialIndices.emplace("", 0);
+    std::uint32_t currentMaterial = 0;
 
     char const *p = contents.data();
     char const *const end = p + contents.size();
@@ -151,9 +234,36 @@ ObjMesh loadObj(std::filesystem::path const & path) {
         ++lineNumber;
         skipSpaces(p, end);
 
+        if (end-p >= 7 && p[0] == 'm' && p[1] == 't' && p[2] == 'l' && p[3] == 'l' && p[4] == 'i' && p[5] == 'b' && isSpace(p[6])) {
+            p += 6;
+            skipSpaces(p, end);
+            char const *name = p;
+            while (p != end && !isSpace(*p) && *p != '\n') {
+                ++p;
+            }
+            if (name == p) {
+                fail("invalid OBJ material library", lineNumber);
+            }
+            loadMtl(path.parent_path() / normalizePath(std::string(name, p)), mesh, materialIndices);
+        } else if (end-p >= 7 && p[0] == 'u' && p[1] == 's' && p[2] == 'e' && p[3] == 'm' && p[4] == 't' && p[5] == 'l' && isSpace(p[6])) {
+            p += 6;
+            skipSpaces(p, end);
+            char const *name = p;
+            while (p != end && !isSpace(*p) && *p != '\n') {
+                ++p;
+            }
+            const auto it = materialIndices.find(std::string(name, p));
+            if (it == materialIndices.end()) {
+                fail("unknown OBJ material", lineNumber);
+            }
+            currentMaterial = it->second;
+        }
+
         if (end - p >= 2 && p[0] == 'v' && isSpace(p[1])) {
             p += 2;
-            positions.push_back(parseVector(p, end, "invalid OBJ vertex", lineNumber));
+            const auto position = parseVector(p, end, "invalid OBJ vertex", lineNumber);
+            positions.push_back(position);
+            mesh.bounds |= position;
         } else if (end - p >= 3 && p[0] == 'v' && p[1] == 't' && isSpace(p[2])) {
             p += 3;
             texcoords.push_back(parseVector2(p, end, "invalid OBJ texcoord", lineNumber));
@@ -179,6 +289,8 @@ ObjMesh loadObj(std::filesystem::path const & path) {
                 fail("OBJ face has fewer than three vertices", lineNumber);
             }
 
+            finishSubmesh(mesh, currentMaterial);
+
             for (std::size_t i = 1; i + 1 < cornerCount; ++i) {
                 for (ObjIndex const index : {face[0], face[i], face[i + 1]}) {
                     VertexKey const key{
@@ -200,6 +312,7 @@ ObjMesh loadObj(std::filesystem::path const & path) {
                              key.texcoord == 0 ? math::vector2f{} : texcoords[key.texcoord - 1]});
                     }
                     mesh.indices.push_back(it->second);
+                    ++mesh.submeshes.back().indexCount;
                 }
             }
         }
