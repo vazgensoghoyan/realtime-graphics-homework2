@@ -23,6 +23,7 @@ struct LightsUniforms {
     lightIntensity: vec3f,
     pointPosition: vec3f,
     pointIntensity: vec3f,
+    pointFarPlane: f32,
 }
 
 struct Immediates {
@@ -32,9 +33,13 @@ struct Immediates {
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
+
 @group(1) @binding(0) var<uniform> lights: LightsUniforms;
 @group(1) @binding(1) var shadowTexture: texture_depth_2d;
 @group(1) @binding(2) var shadowSampler: sampler;
+@group(1) @binding(3) var pointShadowTexture: texture_depth_cube;
+@group(1) @binding(4) var pointShadowSampler: sampler;
+
 @group(2) @binding(0) var materialSampler: sampler;
 @group(2) @binding(1) var albedoTexture: texture_2d<f32>;
 @group(2) @binding(2) var transparencyTexture: texture_2d<f32>;
@@ -89,6 +94,24 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
     }
 
     return result / 9.0;
+}
+
+fn pointShadow(worldPosition: vec3f) -> f32 {
+    let direction = worldPosition - lights.pointPosition;
+    let distance = length(direction);
+
+    let currentDepth = distance / lights.pointFarPlane;
+    if (currentDepth > 1.0) {
+        return 1.0;
+    }
+
+    let storedDepth = textureSample(pointShadowTexture, pointShadowSampler, direction);
+
+    let bias = 0.002;
+    if (currentDepth - bias > storedDepth) {
+        return 0.0;
+    }
+    return 1.0;
 }
 
 fn phongLight(
@@ -163,9 +186,11 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
         immediates.specularPower
     );
 
+    let pointShadowFactor = pointShadow(in.worldPosition);
+
     let pointColor = pointLight(
         lights.pointPosition,
-        lights.pointIntensity,
+        lights.pointIntensity * pointShadowFactor,
         in.worldPosition,
         normal,
         viewDirection,

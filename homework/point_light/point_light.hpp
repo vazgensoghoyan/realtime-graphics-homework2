@@ -33,9 +33,13 @@ public:
     math::vector3f position() const { return m_position; }
     math::vector3f intensity() const { return m_intensity; }
 
+    WGPUTextureView view() const { return m_shadowView; }
+    WGPUSampler sampler() const { return m_shadowSampler; }
+    float farPlane() const { return farrPlane; }
+
 private:
     static constexpr float nearPlane = 0.01f;
-    static constexpr float farPlane = 4.f;
+    static constexpr float farrPlane = 4.f;
 
     math::vector3f m_position;
     math::vector3f m_intensity;

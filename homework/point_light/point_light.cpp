@@ -215,7 +215,7 @@ void PointLight::update(WGPUQueue queue, float time) {
         std::numbers::pi_v<float> / 2.f,
         1.f,
         nearPlane,
-        farPlane
+        farrPlane
     );
 
     constexpr std::array directions {
@@ -242,7 +242,7 @@ void PointLight::update(WGPUQueue queue, float time) {
 
     PointLightUniforms const uniforms{
         .position = m_position,
-        .farPlane = farPlane,
+        .farPlane = farrPlane,
     };
     wgpuQueueWriteBuffer(queue, m_uniformBuffer, 0, &uniforms, sizeof(uniforms));
 }
