@@ -47,6 +47,16 @@ struct DebugDepthTextureImmediates
     math::vector2f extent;
 };
 
+struct MaterialGpu {
+    WGPUTexture albedoTexture;
+    WGPUTextureView albedoTextureView;
+
+    WGPUTexture transparencyTexture;
+    WGPUTextureView transparencyTextureView;
+
+    WGPUBindGroup bindGroup;
+};
+
 WGPUShaderModule createShaderModule(WGPUDevice device, std::filesystem::path const & path) {
     auto const source = loadFile(path);
 
@@ -99,6 +109,33 @@ WGPUBindGroupLayout createLightsBindGroupLayout(WGPUDevice device) {
     return wgpuDeviceCreateBindGroupLayout(device, &bindGroupLayoutDescriptor);
 }
 
+WGPUBindGroupLayout createMaterialBindGroupLayout(WGPUDevice device) {
+    WGPUBindGroupLayoutEntry entries[3];
+
+    entries[0] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+    entries[0].binding = 0;
+    entries[0].visibility = WGPUShaderStage_Fragment;
+    entries[0].sampler.type = WGPUSamplerBindingType_Filtering;
+
+    entries[1] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+    entries[1].binding = 1;
+    entries[1].visibility = WGPUShaderStage_Fragment;
+    entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+    entries[1].texture.sampleType = WGPUTextureSampleType_Float;
+
+    entries[2] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+    entries[2].binding = 2;
+    entries[2].visibility = WGPUShaderStage_Fragment;
+    entries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
+    entries[2].texture.sampleType = WGPUTextureSampleType_Float;
+
+    WGPUBindGroupLayoutDescriptor bindGroupLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+    bindGroupLayoutDescriptor.entries = entries;
+    bindGroupLayoutDescriptor.entryCount = std::size(entries);
+
+    return wgpuDeviceCreateBindGroupLayout(device, &bindGroupLayoutDescriptor);
+}
+
 WGPUBindGroup createCameraBindGroup(WGPUDevice device, WGPUBindGroupLayout bindGroupLayout, WGPUBuffer uniformBuffer) {
     WGPUBindGroupEntry entries[1] = {WGPU_BIND_GROUP_ENTRY_INIT};
     entries[0].binding = 0;
@@ -127,11 +164,35 @@ WGPUBindGroup createLightsBindGroup(WGPUDevice device, WGPUBindGroupLayout bindG
     return wgpuDeviceCreateBindGroup(device, &bindGroupDescriptor);
 }
 
+WGPUBindGroup createMaterialBindGroup(WGPUDevice device, WGPUBindGroupLayout bindGroupLayout, WGPUSampler sampler, const MaterialGpu& material) {
+    WGPUBindGroupEntry entries[3];
+
+    entries[0] = WGPU_BIND_GROUP_ENTRY_INIT;
+    entries[0].binding = 0;
+    entries[0].sampler = sampler;
+
+    entries[1] = WGPU_BIND_GROUP_ENTRY_INIT;
+    entries[1].binding = 1;
+    entries[1].textureView = material.albedoTextureView;
+
+    entries[2] = WGPU_BIND_GROUP_ENTRY_INIT;
+    entries[2].binding = 2;
+    entries[2].textureView = material.transparencyTextureView;
+
+    WGPUBindGroupDescriptor bindGroupDescriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+    bindGroupDescriptor.layout = bindGroupLayout;
+    bindGroupDescriptor.entries = entries;
+    bindGroupDescriptor.entryCount = std::size(entries);
+
+    return wgpuDeviceCreateBindGroup(device, &bindGroupDescriptor);
+}
+
 WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shaderModule, WGPUTextureFormat surfaceFormat,
-        WGPUBindGroupLayout cameraBindGroupLayout, WGPUBindGroupLayout lightsBindGroupLayout) {
-    WGPUBindGroupLayout bindGroupLayouts[2] = {
+        WGPUBindGroupLayout cameraBindGroupLayout, WGPUBindGroupLayout lightsBindGroupLayout, WGPUBindGroupLayout materialBindGroupLayout) {
+    WGPUBindGroupLayout bindGroupLayouts[3] = {
         cameraBindGroupLayout,
         lightsBindGroupLayout,
+        materialBindGroupLayout,
     };
 
     WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
@@ -232,6 +293,64 @@ WGPURenderPipeline createDebugDepthTexturePipeline(WGPUDevice device, WGPUShader
     return renderPipeline;
 }
 
+WGPUTexture createTextureFromImage(WGPUDevice device, WGPUQueue queue, const Image& image) {
+    WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
+    descriptor.usage = WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding;
+    descriptor.dimension = WGPUTextureDimension_2D;
+    descriptor.size = {image.width, image.height, 1};
+    descriptor.format = WGPUTextureFormat_RGBA8Unorm;
+
+    WGPUTexture texture = wgpuDeviceCreateTexture(device, &descriptor);
+
+    WGPUTexelCopyTextureInfo destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+    destination.texture = texture;
+    destination.aspect = WGPUTextureAspect_All;
+
+    WGPUTexelCopyBufferLayout layout = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
+    layout.bytesPerRow = image.width * 4;
+    layout.rowsPerImage = image.height;
+
+    WGPUExtent3D extent = WGPU_EXTENT_3D_INIT;
+    extent.width = image.width;
+    extent.height = image.height;
+
+    wgpuQueueWriteTexture(queue, &destination, image.pixels.get(), image.width * image.height * 4, &layout, &extent);
+
+    return texture;
+}
+
+WGPUTexture createTexture(WGPUDevice device, WGPUQueue queue, const std::filesystem::path& path) {
+    Image image = loadImage(path);
+
+    if (!image.pixels || image.width == 0 || image.height == 0) {
+        throw std::runtime_error("failed to load texture");
+    }
+
+    return createTextureFromImage(device, queue, image);
+}
+
+WGPUTexture createSolidTexture(WGPUDevice device, WGPUQueue queue, Image::Pixel pixel) {
+    Image image;
+    image.width = 1;
+    image.height = 1;
+    image.pixels = std::make_unique<Image::Pixel[]>(1);
+    image.pixels[0] = pixel;
+
+    return createTextureFromImage(device, queue, image);
+}
+
+WGPUSampler createSampler(WGPUDevice device) {
+    WGPUSamplerDescriptor descriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
+    descriptor.addressModeU = WGPUAddressMode_Repeat;
+    descriptor.addressModeV = WGPUAddressMode_Repeat;
+    descriptor.addressModeW = WGPUAddressMode_Repeat;
+    descriptor.magFilter = WGPUFilterMode_Linear;
+    descriptor.minFilter = WGPUFilterMode_Linear;
+    descriptor.mipmapFilter = WGPUMipmapFilterMode_Nearest;
+
+    return wgpuDeviceCreateSampler(device, &descriptor);
+}
+
 int main(int argc, char **argv) try {
     if (argc != 2) {
         throw std::runtime_error("usage: homework2 <scene.obj>");
@@ -242,11 +361,12 @@ int main(int argc, char **argv) try {
 
     WGPUBindGroupLayout cameraBindGroupLayout = createCameraBindGroupLayout(app.device());
     WGPUBindGroupLayout lightsBindGroupLayout = createLightsBindGroupLayout(app.device());
+    WGPUBindGroupLayout materialBindGroupLayout = createMaterialBindGroupLayout(app.device());
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");
     WGPUShaderModule debugDepthTextureShaderModule = createShaderModule(app.device(), projectRoot / "debug_depth_texture_shader.wgsl");
 
-    WGPURenderPipeline renderPipeline = createPipeline(app.device(), shaderModule, app.surfaceFormat(), cameraBindGroupLayout, lightsBindGroupLayout);
+    WGPURenderPipeline renderPipeline = createPipeline(app.device(), shaderModule, app.surfaceFormat(), cameraBindGroupLayout, lightsBindGroupLayout, materialBindGroupLayout);
     WGPURenderPipeline debugDepthTextureRenderPipeline = createDebugDepthTexturePipeline(app.device(), debugDepthTextureShaderModule, app.surfaceFormat(), lightsBindGroupLayout);
 
     WGPUBuffer cameraUniformBuffer = createBuffer(app.device(), sizeof(CameraUniforms), WGPUBufferUsage_Uniform);
@@ -256,6 +376,39 @@ int main(int argc, char **argv) try {
 
     const char* scenePath = argv[1];
     ObjMesh scene = loadObj(scenePath);
+
+    WGPUSampler textureSampler = createSampler(app.device());
+
+    WGPUTexture fallbackAlbedo = createSolidTexture(app.device(), app.queue(), {255, 255, 255, 255});
+    WGPUTextureView fallbackAlbedoView = wgpuTextureCreateView(fallbackAlbedo, nullptr);
+
+    WGPUTexture fallbackTransparency = createSolidTexture(app.device(), app.queue(), {255, 255, 255, 255});
+    WGPUTextureView fallbackTransparencyView = wgpuTextureCreateView(fallbackTransparency, nullptr);
+
+    std::vector<MaterialGpu> gpuMaterials;
+    for (const auto& material : scene.materials) {
+        MaterialGpu materialGpu{};
+
+        if (material.albedoTexture.empty()) {
+            materialGpu.albedoTexture = fallbackAlbedo;
+            materialGpu.albedoTextureView = fallbackAlbedoView;
+        } else {
+            materialGpu.albedoTexture = createTexture(app.device(), app.queue(), material.albedoTexture);
+            materialGpu.albedoTextureView = wgpuTextureCreateView(materialGpu.albedoTexture, nullptr);
+        }
+
+        if (material.transparencyTexture.empty()) {
+            materialGpu.transparencyTexture = fallbackTransparency;
+            materialGpu.transparencyTextureView = fallbackTransparencyView;
+        } else {
+            materialGpu.transparencyTexture = createTexture(app.device(), app.queue(), material.transparencyTexture);
+            materialGpu.transparencyTextureView = wgpuTextureCreateView(materialGpu.transparencyTexture, nullptr);
+        }
+
+        materialGpu.bindGroup = createMaterialBindGroup(app.device(), materialBindGroupLayout, textureSampler, materialGpu);
+
+        gpuMaterials.push_back(materialGpu);
+    }
 
     auto vertexBuffer = loadBuffer(app.device(), app.queue(), scene.vertices, WGPUBufferUsage_Vertex);
     auto indexBuffer = loadBuffer(app.device(), app.queue(), scene.indices, WGPUBufferUsage_Index);
@@ -390,6 +543,8 @@ int main(int argc, char **argv) try {
         wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, vertexBuffer, 0, WGPU_WHOLE_SIZE);
         wgpuRenderPassEncoderSetIndexBuffer(renderPass, indexBuffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
         for (const auto& submesh : scene.submeshes) {
+            const auto& material = gpuMaterials[submesh.materialIndex];
+            wgpuRenderPassEncoderSetBindGroup(renderPass, 2, material.bindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetImmediates(renderPass, 0, &immediates, sizeof(immediates));
             wgpuRenderPassEncoderDrawIndexed(renderPass, submesh.indexCount, 1, submesh.firstIndex, 0, 0);
         }
