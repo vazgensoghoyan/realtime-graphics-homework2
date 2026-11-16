@@ -2,6 +2,7 @@
 
 #include <math/aliases.hpp>
 #include <obj_loader.hpp>
+#include <shadow_blur.hpp>
 #include <webgpu.h>
 
 #include <array>
@@ -13,6 +14,7 @@ public:
     PointLight(
         WGPUDevice device,
         const std::filesystem::path& shaderPath,
+        const std::filesystem::path& blurShaderPath,
         WGPUBindGroupLayout materialLayout,
         math::vector3f intensity,
         std::uint32_t shadowSize
@@ -48,11 +50,15 @@ private:
     WGPUTextureView m_depthView;
     WGPUTexture m_momentsTexture;
     WGPUTextureView m_momentsView;
+    WGPUTexture m_blurTexture;
 
     std::array<WGPUTextureView, 6> m_depthFaceViews;
     std::array<WGPUTextureView, 6> m_momentsFaceViews;
+    std::array<WGPUTextureView, 6> m_blurFaceViews;
+
     std::array<math::matrix4f, 6> m_shadowMatrices;
 
+    ShadowBlur m_blur;  
     WGPUSampler m_shadowSampler;
 
     WGPUBuffer m_uniformBuffer;

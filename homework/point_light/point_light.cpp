@@ -160,6 +160,7 @@ WGPURenderPipeline createShadowPipeline(WGPUDevice device, WGPUShaderModule shad
 PointLight::PointLight(
     WGPUDevice device,
     const std::filesystem::path& shaderPath,
+    const std::filesystem::path& blurShaderPath,
     WGPUBindGroupLayout materialLayout,
     math::vector3f intensity,
     std::uint32_t shadowSize
@@ -170,8 +171,11 @@ PointLight::PointLight(
     , m_depthView(createShadowView(m_depthTexture, WGPUTextureFormat_Depth24Plus, WGPUTextureAspect_DepthOnly))
     , m_momentsTexture(createShadowTexture(device, shadowSize, WGPUTextureFormat_RG32Float))
     , m_momentsView(createShadowView(m_momentsTexture, WGPUTextureFormat_RG32Float, WGPUTextureAspect_All))
+    , m_blurTexture(createShadowTexture(device, shadowSize, WGPUTextureFormat_RG32Float))
     , m_depthFaceViews(createShadowFaceViews(m_depthTexture, WGPUTextureFormat_Depth24Plus, WGPUTextureAspect_DepthOnly))
     , m_momentsFaceViews(createShadowFaceViews(m_momentsTexture, WGPUTextureFormat_RG32Float, WGPUTextureAspect_All))
+    , m_blurFaceViews(createShadowFaceViews(m_blurTexture, WGPUTextureFormat_RG32Float, WGPUTextureAspect_All))
+    , m_blur(device, blurShaderPath)
     , m_shadowSampler(createShadowSampler(device))
     , m_uniformBuffer(createUniformBuffer(device))
     , m_shadowBindGroupLayout(createBindGroupLayout(device))
@@ -197,6 +201,7 @@ PointLight::~PointLight() {
     wgpuTextureRelease(m_depthTexture);
     wgpuTextureViewRelease(m_momentsView);
     wgpuTextureRelease(m_momentsTexture);
+    wgpuTextureRelease(m_blurTexture);
 }
 
 void PointLight::update(WGPUQueue queue, float time) {
@@ -305,5 +310,11 @@ void PointLight::render(
 
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
+
+        m_blur.render(
+            encoder,
+            m_momentsFaceViews[face],
+            m_blurFaceViews[face]
+        );
     }
 }
