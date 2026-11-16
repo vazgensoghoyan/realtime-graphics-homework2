@@ -82,7 +82,7 @@ WGPUBindGroupLayout createLightsBindGroupLayout(WGPUDevice device) {
     entries[1] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
     entries[1].binding = 1;
     entries[1].visibility = WGPUShaderStage_Fragment;
-    entries[1].texture.sampleType = WGPUTextureSampleType_Depth;
+    entries[1].texture.sampleType = WGPUTextureSampleType_UnfilterableFloat;
     entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
 
     entries[2] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
@@ -316,7 +316,7 @@ int main(int argc, char **argv) try {
     WGPUBuffer cameraUniformBuffer = createBuffer(app.device(), sizeof(CameraUniforms), WGPUBufferUsage_Uniform);
     WGPUBuffer lightsUniformBuffer = createBuffer(app.device(), sizeof(LightsUniforms), WGPUBufferUsage_Uniform);
     WGPUBindGroup cameraBindGroup = createCameraBindGroup(app.device(), cameraBindGroupLayout, cameraUniformBuffer);
-    WGPUBindGroup lightsBindGroup = createLightsBindGroup(app.device(), lightsBindGroupLayout, lightsUniformBuffer, shadow.view(), shadow.sampler(), pointLight.view(), pointLight.sampler());
+    WGPUBindGroup lightsBindGroup = createLightsBindGroup(app.device(), lightsBindGroupLayout, lightsUniformBuffer, shadow.momentsView(), shadow.sampler(), pointLight.view(), pointLight.sampler());
 
     const char* scenePath = argv[1];
     ObjMesh scene = loadObj(scenePath);
@@ -462,7 +462,7 @@ int main(int argc, char **argv) try {
             .shadowProjectionTranspose = math::transpose(shadow.projection()),
             .ambientIntensity = {0.05f, 0.10f, 0.15f},
             .lightDirection = lightDirection,
-            .lightIntensity = {0.8f, 0.6f, 0.4f},
+            .lightIntensity = {1.5f, 1.2f, 0.9f},
             .pointPosition = pointLight.position(),
             .pointIntensity = pointLight.intensity(),
             .pointFarPlane = pointLight.farPlane(),

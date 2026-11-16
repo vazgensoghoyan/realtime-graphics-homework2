@@ -12,22 +12,18 @@ struct ShadowImmediates {
     math::matrix4f shadowProjectionTranspose;
 };
 
-WGPUTexture createTexture(WGPUDevice device, std::uint32_t size) {
+WGPUTexture createTexture(WGPUDevice device, std::uint32_t size, WGPUTextureFormat format) {
     WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
     descriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
     descriptor.dimension = WGPUTextureDimension_2D;
     descriptor.size = {size, size, 1};
-    descriptor.format = WGPUTextureFormat_Depth24Plus;
+    descriptor.format = format;
     return wgpuDeviceCreateTexture(device, &descriptor);
 }
 
-WGPUTextureView createView(WGPUTexture texture) {
+WGPUTextureView createView(WGPUTexture texture, WGPUTextureAspect aspect) {
     WGPUTextureViewDescriptor descriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
-    descriptor.format = WGPUTextureFormat_Depth24Plus;
-    descriptor.dimension = WGPUTextureViewDimension_2D;
-    descriptor.mipLevelCount = 1;
-    descriptor.arrayLayerCount = 1;
-    descriptor.aspect = WGPUTextureAspect_DepthOnly;
+    descriptor.aspect = aspect;
     return wgpuTextureCreateView(texture, &descriptor);
 }
 
@@ -49,9 +45,15 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shader, WG
     layoutDescriptor.bindGroupLayouts = &materialLayout;
     WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(device, &layoutDescriptor);
 
+    WGPUColorTargetState colorTarget = WGPU_COLOR_TARGET_STATE_INIT;
+    colorTarget.format = WGPUTextureFormat_RG32Float;
+    colorTarget.writeMask = WGPUColorWriteMask_All;
+
     WGPUFragmentState fragmentState = WGPU_FRAGMENT_STATE_INIT;
     fragmentState.module = shader;
     fragmentState.entryPoint = {"fragmentMain", WGPU_STRLEN};
+    fragmentState.targetCount = 1;
+    fragmentState.targets = &colorTarget;
 
     WGPUVertexAttribute attributes[2];
 
@@ -140,8 +142,10 @@ DirectionalShadow::DirectionalShadow(
     WGPUBindGroupLayout materialLayout,
     std::uint32_t size
 )
-    : m_texture(createTexture(device, size))
-    , m_view(createView(m_texture))
+    : m_depthTexture(createTexture(device, size, WGPUTextureFormat_Depth24Plus))
+    , m_depthView(createView(m_depthTexture, WGPUTextureAspect_DepthOnly))
+    , m_momentsTexture(createTexture(device, size, WGPUTextureFormat_RG32Float))
+    , m_momentsView(createView(m_momentsTexture, WGPUTextureAspect_All))
     , m_sampler(createShadowSampler(device))
     , m_shaderModule(createShaderModule(device, shaderPath))
     , m_pipeline(createPipeline(device, m_shaderModule, materialLayout))
@@ -151,8 +155,10 @@ DirectionalShadow::~DirectionalShadow() {
     wgpuRenderPipelineRelease(m_pipeline);
     wgpuShaderModuleRelease(m_shaderModule);
     wgpuSamplerRelease(m_sampler);
-    wgpuTextureViewRelease(m_view);
-    wgpuTextureRelease(m_texture);
+    wgpuTextureViewRelease(m_momentsView);
+    wgpuTextureRelease(m_momentsTexture);
+    wgpuTextureViewRelease(m_depthView);
+    wgpuTextureRelease(m_depthTexture);
 }
 
 void DirectionalShadow::update(
@@ -185,8 +191,14 @@ void DirectionalShadow::render(
     const std::vector<ObjSubmesh>& submeshes,
     const std::vector<WGPUBindGroup>& materialBindGroups
 ) {
+    WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+    colorAttachment.view = m_momentsView;
+    colorAttachment.loadOp = WGPULoadOp_Clear;
+    colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.clearValue = {1.f, 1.f, 0.f, 0.f};
+
     WGPURenderPassDepthStencilAttachment depthAttachment = WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
-    depthAttachment.view = m_view;
+    depthAttachment.view = m_depthView;
     depthAttachment.depthLoadOp = WGPULoadOp_Clear;
     depthAttachment.depthStoreOp = WGPUStoreOp_Store;
     depthAttachment.depthClearValue = 1.f;
@@ -194,6 +206,8 @@ void DirectionalShadow::render(
 
     WGPURenderPassDescriptor descriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
     descriptor.depthStencilAttachment = &depthAttachment;
+    descriptor.colorAttachmentCount = 1;
+    descriptor.colorAttachments = &colorAttachment;
 
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &descriptor);
 

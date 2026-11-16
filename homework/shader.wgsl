@@ -35,7 +35,7 @@ struct Immediates {
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 
 @group(1) @binding(0) var<uniform> lights: LightsUniforms;
-@group(1) @binding(1) var shadowTexture: texture_depth_2d;
+@group(1) @binding(1) var shadowTexture: texture_2d<f32>;
 @group(1) @binding(2) var shadowSampler: sampler;
 @group(1) @binding(3) var pointShadowTexture: texture_depth_cube;
 @group(1) @binding(4) var pointShadowSampler: sampler;
@@ -75,22 +75,24 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
 
     let uv = position.xy * vec2f(0.5, -0.5) + vec2f(0.5);
 
-    let textureSize = vec2f(textureDimensions(shadowTexture));
-    let texelSize = vec2f(1.0) / textureSize;
+    let dimensions = vec2f(textureDimensions(shadowTexture));
+    let pixel = vec2i(clamp(uv * dimensions, vec2f(0.0), dimensions - vec2f(1.0)));
 
-    var result = 0.0;
+    let moments = textureLoad(shadowTexture, pixel, 0);
 
-    for (var y = -1; y <= 1; y++) {
-        for (var x = -1; x <= 1; x++) {
-            let offset = vec2f(f32(x), f32(y)) * texelSize;
-            let storedDepth = textureSample(shadowTexture, shadowSampler, uv + offset);
-            if (position.z - BIAS <= storedDepth) {
-                result += 1.0;
-            }
-        }
+    let e = moments.x;
+    let ee = moments.y;
+
+    let d = max(ee - e * e, 0.00002);
+
+    let depth = position.z;
+    let diff = depth - e;
+
+    if (depth <= e) {
+        return 1.0;
     }
 
-    return result / 9.0;
+    return clamp(d / (d + diff * diff), 0.0, 1.0);
 }
 
 fn pointShadow(worldPosition: vec3f) -> f32 {

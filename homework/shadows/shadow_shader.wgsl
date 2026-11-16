@@ -13,6 +13,10 @@ struct Immediates {
     shadowProjection: mat4x4f,
 }
 
+struct FragmentOut {
+    @location(0) moments: vec2f,
+}
+
 @group(0) @binding(0) var materialSampler: sampler;
 @group(0) @binding(2) var transparencyTexture: texture_2d<f32>;
 
@@ -28,9 +32,14 @@ fn vertexMain(in: VertexIn) -> VertexOut {
 }
 
 @fragment
-fn fragmentMain(in: VertexOut) {
+fn fragmentMain(in: VertexOut) -> FragmentOut {
     let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
     if (alpha < 0.5) {
         discard;
     }
+
+    let depth = in.position.z;
+    return FragmentOut(
+        vec2f(depth, depth * depth)
+    );
 }

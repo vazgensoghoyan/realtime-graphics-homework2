@@ -32,13 +32,17 @@ public:
         const std::vector<WGPUBindGroup>& materialBindGroups
     );
 
-    WGPUTextureView view() const { return m_view; }
+    WGPUTextureView momentsView() const { return m_momentsView; }
     WGPUSampler sampler() const { return m_sampler; }
     math::matrix4f projection() const { return m_projection; }
 
 private:
-    WGPUTexture m_texture;
-    WGPUTextureView m_view;
+    WGPUTexture m_depthTexture;
+    WGPUTextureView m_depthView;
+
+    WGPUTexture m_momentsTexture;
+    WGPUTextureView m_momentsView;
+
     WGPUSampler m_sampler;
 
     WGPUShaderModule m_shaderModule;
