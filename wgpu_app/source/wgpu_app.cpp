@@ -109,6 +109,7 @@ WGPUDevice requestDevice(WGPUAdapter adapter) {
     WGPUFeatureName const features[] = {
         static_cast<WGPUFeatureName>(WGPUNativeFeature_Immediates),
         static_cast<WGPUFeatureName>(WGPUFeatureName_Float32Filterable),
+        static_cast<WGPUFeatureName>(WGPUFeatureName_DepthClipControl),
     };
     WGPULimits limits = WGPU_LIMITS_INIT;
     limits.maxImmediateSize = 128;

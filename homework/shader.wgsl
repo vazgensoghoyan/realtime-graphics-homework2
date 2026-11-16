@@ -78,24 +78,6 @@ fn chebyshevShadow(moments: vec2f, depth: f32) -> f32 {
     );
 }
 
-fn blurredDirectionalMoments(uv: vec2f) -> vec2f {
-    let dimensions = textureDimensions(shadowTexture);
-    let dimensionsF = vec2f(dimensions);
-    let maxPixel = vec2i(dimensions) - vec2i(1);
-
-    let center = vec2i(clamp(uv * dimensionsF, vec2f(0.0), dimensionsF - vec2f(1.0)));
-
-    var moments = vec2f(0.0);
-    for (var y = -1; y <= 1; y++) {
-        for (var x = -1; x <= 1; x++) {
-            let offset = vec2i(x, y);
-            let pixel = clamp(center + offset, vec2i(0), maxPixel);
-            moments += textureLoad(shadowTexture, pixel, 0).xy;
-        }
-    }
-    return moments / 9.0;
-}
-
 fn directionalShadow(worldPosition: vec3f) -> f32 {
     var position = lights.shadowProjection * vec4f(worldPosition, 1.0);
     position /= position.w;
@@ -111,7 +93,16 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
 
     let uv = position.xy * vec2f(0.5, -0.5) + vec2f(0.5);
 
-    let moments = blurredDirectionalMoments(uv);
+    let dimensions = textureDimensions(shadowTexture);
+    let dimensionsF = vec2f(dimensions);
+
+    let pixel = vec2i(clamp(
+        uv * dimensionsF,
+        vec2f(0.0),
+        dimensionsF - vec2f(1.0)
+    ));
+
+    let moments = textureLoad(shadowTexture, pixel, 0).xy;
 
     return chebyshevShadow(moments, position.z);
 }
@@ -127,32 +118,14 @@ fn pointShadow(worldPosition: vec3f) -> f32 {
     let dir = light_to_point / distance;
     let currentDepth = distance / lights.pointFarPlane;
 
-    let helper = select(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), abs(dir.y) > 0.9);
-    let tangent = normalize(cross(helper, dir));
-    let bitangent = cross(dir, tangent);
-    let texelAngle = 2.0 / f32(textureDimensions(pointShadowTexture).x);
+    let moments = textureSampleLevel(
+        pointShadowTexture,
+        pointShadowSampler,
+        dir,
+        0.0
+    ).xy;
 
-    var moments = vec2f(0.0);
-
-    for (var y = -1; y <= 1; y++) {
-        for (var x = -1; x <= 1; x++) {
-            let sampleDirection = normalize(
-                dir + texelAngle * (
-                    f32(x) * tangent +
-                    f32(y) * bitangent
-                )
-            );
-
-            moments += textureSampleLevel(
-                pointShadowTexture,
-                pointShadowSampler,
-                sampleDirection,
-                0.0
-            ).xy;
-        }
-    }
-
-    return chebyshevShadow(moments / 9.0, currentDepth);
+    return chebyshevShadow(moments, currentDepth);
 }
 
 fn phongLight(

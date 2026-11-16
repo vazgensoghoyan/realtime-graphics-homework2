@@ -460,9 +460,9 @@ int main(int argc, char **argv) try {
 
         const LightsUniforms lightsUniforms {
             .shadowProjectionTranspose = math::transpose(shadow.projection()),
-            .ambientIntensity = {0.05f, 0.10f, 0.15f},
+            .ambientIntensity = {0.1f, 0.2f, 0.3f},
             .lightDirection = lightDirection,
-            .lightIntensity = {1.5f, 1.2f, 0.9f},
+            .lightIntensity = {2.0f, 1.7f, 1.4f},
             .pointPosition = pointLight.position(),
             .pointIntensity = pointLight.intensity(),
             .pointFarPlane = pointLight.farPlane(),
