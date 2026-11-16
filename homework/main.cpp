@@ -93,13 +93,13 @@ WGPUBindGroupLayout createLightsBindGroupLayout(WGPUDevice device) {
     entries[3] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
     entries[3].binding = 3;
     entries[3].visibility = WGPUShaderStage_Fragment;
-    entries[3].texture.sampleType = WGPUTextureSampleType_Depth;
+    entries[3].texture.sampleType = WGPUTextureSampleType_UnfilterableFloat;
     entries[3].texture.viewDimension = WGPUTextureViewDimension_Cube;
 
     entries[4] = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
     entries[4].binding = 4;
     entries[4].visibility = WGPUShaderStage_Fragment;
-    entries[4].sampler.type = WGPUSamplerBindingType_Filtering;
+    entries[4].sampler.type = WGPUSamplerBindingType_NonFiltering;
 
     WGPUBindGroupLayoutDescriptor bindGroupLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
     bindGroupLayoutDescriptor.entries = entries;
@@ -316,7 +316,7 @@ int main(int argc, char **argv) try {
     WGPUBuffer cameraUniformBuffer = createBuffer(app.device(), sizeof(CameraUniforms), WGPUBufferUsage_Uniform);
     WGPUBuffer lightsUniformBuffer = createBuffer(app.device(), sizeof(LightsUniforms), WGPUBufferUsage_Uniform);
     WGPUBindGroup cameraBindGroup = createCameraBindGroup(app.device(), cameraBindGroupLayout, cameraUniformBuffer);
-    WGPUBindGroup lightsBindGroup = createLightsBindGroup(app.device(), lightsBindGroupLayout, lightsUniformBuffer, shadow.momentsView(), shadow.sampler(), pointLight.view(), pointLight.sampler());
+    WGPUBindGroup lightsBindGroup = createLightsBindGroup(app.device(), lightsBindGroupLayout, lightsUniformBuffer, shadow.momentsView(), shadow.sampler(), pointLight.momentsView(), pointLight.sampler());
 
     const char* scenePath = argv[1];
     ObjMesh scene = loadObj(scenePath);

@@ -37,7 +37,7 @@ struct Immediates {
 @group(1) @binding(0) var<uniform> lights: LightsUniforms;
 @group(1) @binding(1) var shadowTexture: texture_2d<f32>;
 @group(1) @binding(2) var shadowSampler: sampler;
-@group(1) @binding(3) var pointShadowTexture: texture_depth_cube;
+@group(1) @binding(3) var pointShadowTexture: texture_cube<f32>;
 @group(1) @binding(4) var pointShadowSampler: sampler;
 
 @group(2) @binding(0) var materialSampler: sampler;
@@ -59,6 +59,42 @@ fn vertexMain(in: VertexIn) -> VertexOut {
 
 const PI = 3.1415926535;
 const BIAS = 0.002;
+const LIGHT_BLEEDING = 0.2;
+
+fn chebyshevShadow(moments: vec2f, depth: f32) -> f32 {
+    let e = moments.x;
+    let d = max(moments.y - e * e, 0.00002);
+    let diff = depth - e;
+
+    if (depth <= e) {
+        return 1.0;
+    }
+
+    let probability = clamp(d / (d + diff * diff), 0.0, 1.0);
+    return clamp(
+        (probability - LIGHT_BLEEDING) / (1.0 - LIGHT_BLEEDING),
+        0.0,
+        1.0
+    );
+}
+
+fn blurredDirectionalMoments(uv: vec2f) -> vec2f {
+    let dimensions = textureDimensions(shadowTexture);
+    let dimensionsF = vec2f(dimensions);
+    let maxPixel = vec2i(dimensions) - vec2i(1);
+
+    let center = vec2i(clamp(uv * dimensionsF, vec2f(0.0), dimensionsF - vec2f(1.0)));
+
+    var moments = vec2f(0.0);
+    for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+            let offset = vec2i(x, y);
+            let pixel = clamp(center + offset, vec2i(0), maxPixel);
+            moments += textureLoad(shadowTexture, pixel, 0).xy;
+        }
+    }
+    return moments / 9.0;
+}
 
 fn directionalShadow(worldPosition: vec3f) -> f32 {
     var position = lights.shadowProjection * vec4f(worldPosition, 1.0);
@@ -75,24 +111,9 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
 
     let uv = position.xy * vec2f(0.5, -0.5) + vec2f(0.5);
 
-    let dimensions = vec2f(textureDimensions(shadowTexture));
-    let pixel = vec2i(clamp(uv * dimensions, vec2f(0.0), dimensions - vec2f(1.0)));
+    let moments = blurredDirectionalMoments(uv);
 
-    let moments = textureLoad(shadowTexture, pixel, 0);
-
-    let e = moments.x;
-    let ee = moments.y;
-
-    let d = max(ee - e * e, 0.00002);
-
-    let depth = position.z;
-    let diff = depth - e;
-
-    if (depth <= e) {
-        return 1.0;
-    }
-
-    return clamp(d / (d + diff * diff), 0.0, 1.0);
+    return chebyshevShadow(moments, position.z);
 }
 
 fn pointShadow(worldPosition: vec3f) -> f32 {
@@ -111,19 +132,27 @@ fn pointShadow(worldPosition: vec3f) -> f32 {
     let bitangent = cross(dir, tangent);
     let texelAngle = 2.0 / f32(textureDimensions(pointShadowTexture).x);
 
-    var result = 0.0;
+    var moments = vec2f(0.0);
 
     for (var y = -1; y <= 1; y++) {
         for (var x = -1; x <= 1; x++) {
-            let sampleDirection = dir + texelAngle * (f32(x) * tangent + f32(y) * bitangent);
-            let storedDepth = textureSampleLevel(pointShadowTexture, pointShadowSampler, sampleDirection, 0);
-            if (currentDepth - BIAS <= storedDepth) {
-                result += 1.0;
-            }
+            let sampleDirection = normalize(
+                dir + texelAngle * (
+                    f32(x) * tangent +
+                    f32(y) * bitangent
+                )
+            );
+
+            moments += textureSampleLevel(
+                pointShadowTexture,
+                pointShadowSampler,
+                sampleDirection,
+                0.0
+            ).xy;
         }
     }
 
-    return result / 9.0;
+    return chebyshevShadow(moments / 9.0, currentDepth);
 }
 
 fn phongLight(

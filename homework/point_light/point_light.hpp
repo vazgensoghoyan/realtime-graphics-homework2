@@ -33,7 +33,7 @@ public:
     math::vector3f position() const { return m_position; }
     math::vector3f intensity() const { return m_intensity; }
 
-    WGPUTextureView view() const { return m_shadowView; }
+    WGPUTextureView momentsView() const { return m_momentsView; }
     WGPUSampler sampler() const { return m_shadowSampler; }
     float farPlane() const { return farrPlane; }
 
@@ -44,10 +44,13 @@ private:
     math::vector3f m_position;
     math::vector3f m_intensity;
 
-    WGPUTexture m_shadowTexture;
-    WGPUTextureView m_shadowView;
+    WGPUTexture m_depthTexture;
+    WGPUTextureView m_depthView;
+    WGPUTexture m_momentsTexture;
+    WGPUTextureView m_momentsView;
 
-    std::array<WGPUTextureView, 6> m_shadowFaceViews;
+    std::array<WGPUTextureView, 6> m_depthFaceViews;
+    std::array<WGPUTextureView, 6> m_momentsFaceViews;
     std::array<math::matrix4f, 6> m_shadowMatrices;
 
     WGPUSampler m_shadowSampler;

@@ -35,13 +35,23 @@ fn vertexMain(in: VertexIn) -> VertexOut {
     );
 }
 
+struct FragmentOut {
+    @location(0) moments: vec2f,
+    @builtin(frag_depth) depth: f32,
+}
+
 @fragment
-fn fragmentMain(in: VertexOut) -> @builtin(frag_depth) f32 {
+fn fragmentMain(in: VertexOut) -> FragmentOut {
     let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
     if (alpha < 0.5) {
         discard;
     }
 
     let distance = length(in.worldPosition - pointLight.position);
-    return clamp(distance / pointLight.farPlane, 0.0, 1.0);
+    let depth = clamp(distance / pointLight.farPlane, 0.0, 1.0);
+
+    return FragmentOut(
+        vec2f(depth, depth * depth),
+        depth
+    );
 }

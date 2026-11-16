@@ -56,35 +56,35 @@ WGPUBindGroup createBindGroup(
     return wgpuDeviceCreateBindGroup(device, &descriptor);
 }
 
-WGPUTexture createShadowTexture(WGPUDevice device, std::uint32_t size) {
+WGPUTexture createShadowTexture(WGPUDevice device, std::uint32_t size, WGPUTextureFormat format) {
     WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
     descriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
     descriptor.dimension = WGPUTextureDimension_2D;
     descriptor.size = {size, size, 6};
-    descriptor.format = WGPUTextureFormat_Depth24Plus;
+    descriptor.format = format;
     return wgpuDeviceCreateTexture(device, &descriptor);
 }
 
-WGPUTextureView createShadowView(WGPUTexture texture) {
+WGPUTextureView createShadowView(WGPUTexture texture, WGPUTextureFormat format, WGPUTextureAspect aspect) {
     WGPUTextureViewDescriptor descriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
-    descriptor.format = WGPUTextureFormat_Depth24Plus;
+    descriptor.format = format;
     descriptor.dimension = WGPUTextureViewDimension_Cube;
     descriptor.mipLevelCount = 1;
     descriptor.arrayLayerCount = 6;
-    descriptor.aspect = WGPUTextureAspect_DepthOnly;
+    descriptor.aspect = aspect;
     return wgpuTextureCreateView(texture, &descriptor);
 }
 
-std::array<WGPUTextureView, 6> createShadowFaceViews(WGPUTexture texture) {
+std::array<WGPUTextureView, 6> createShadowFaceViews(WGPUTexture texture, WGPUTextureFormat format, WGPUTextureAspect aspect) {
     std::array<WGPUTextureView, 6> result;
     for (std::uint32_t face = 0; face < result.size(); ++face) {
         WGPUTextureViewDescriptor descriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
-        descriptor.format = WGPUTextureFormat_Depth24Plus;
+        descriptor.format = format;
         descriptor.dimension = WGPUTextureViewDimension_2D;
         descriptor.baseArrayLayer = face;
         descriptor.arrayLayerCount = 1;
         descriptor.mipLevelCount = 1;
-        descriptor.aspect = WGPUTextureAspect_DepthOnly;
+        descriptor.aspect = aspect;
         result[face] = wgpuTextureCreateView(texture, &descriptor);
     }
     return result;
@@ -95,8 +95,8 @@ WGPUSampler createShadowSampler(WGPUDevice device) {
     descriptor.addressModeU = WGPUAddressMode_ClampToEdge;
     descriptor.addressModeV = WGPUAddressMode_ClampToEdge;
     descriptor.addressModeW = WGPUAddressMode_ClampToEdge;
-    descriptor.magFilter = WGPUFilterMode_Linear;
-    descriptor.minFilter = WGPUFilterMode_Linear;
+    descriptor.magFilter = WGPUFilterMode_Nearest;
+    descriptor.minFilter = WGPUFilterMode_Nearest;
     descriptor.mipmapFilter = WGPUMipmapFilterMode_Nearest;
     return wgpuDeviceCreateSampler(device, &descriptor);
 }
@@ -127,6 +127,12 @@ WGPURenderPipeline createShadowPipeline(WGPUDevice device, WGPUShaderModule shad
     WGPUFragmentState fragmentState = WGPU_FRAGMENT_STATE_INIT;
     fragmentState.module = shader;
     fragmentState.entryPoint = {"fragmentMain", WGPU_STRLEN};
+
+    WGPUColorTargetState colorTarget = WGPU_COLOR_TARGET_STATE_INIT;
+    colorTarget.format = WGPUTextureFormat_RG32Float;
+    colorTarget.writeMask = WGPUColorWriteMask_All;
+    fragmentState.targetCount = 1;
+    fragmentState.targets = &colorTarget;
 
     WGPUDepthStencilState depthState = WGPU_DEPTH_STENCIL_STATE_INIT;
     depthState.format = WGPUTextureFormat_Depth24Plus;
@@ -160,9 +166,12 @@ PointLight::PointLight(
 )
     : m_position(math::vector3f::zero())
     , m_intensity(intensity)
-    , m_shadowTexture(createShadowTexture(device, shadowSize))
-    , m_shadowView(createShadowView(m_shadowTexture))
-    , m_shadowFaceViews(createShadowFaceViews(m_shadowTexture))
+    , m_depthTexture(createShadowTexture(device, shadowSize, WGPUTextureFormat_Depth24Plus))
+    , m_depthView(createShadowView(m_depthTexture, WGPUTextureFormat_Depth24Plus, WGPUTextureAspect_DepthOnly))
+    , m_momentsTexture(createShadowTexture(device, shadowSize, WGPUTextureFormat_RG32Float))
+    , m_momentsView(createShadowView(m_momentsTexture, WGPUTextureFormat_RG32Float, WGPUTextureAspect_All))
+    , m_depthFaceViews(createShadowFaceViews(m_depthTexture, WGPUTextureFormat_Depth24Plus, WGPUTextureAspect_DepthOnly))
+    , m_momentsFaceViews(createShadowFaceViews(m_momentsTexture, WGPUTextureFormat_RG32Float, WGPUTextureAspect_All))
     , m_shadowSampler(createShadowSampler(device))
     , m_uniformBuffer(createUniformBuffer(device))
     , m_shadowBindGroupLayout(createBindGroupLayout(device))
@@ -178,11 +187,16 @@ PointLight::~PointLight() {
     wgpuBindGroupLayoutRelease(m_shadowBindGroupLayout);
     wgpuBufferRelease(m_uniformBuffer);
     wgpuSamplerRelease(m_shadowSampler);
-    for (WGPUTextureView view : m_shadowFaceViews) {
+    for (WGPUTextureView view : m_depthFaceViews) {
         wgpuTextureViewRelease(view);
     }
-    wgpuTextureViewRelease(m_shadowView);
-    wgpuTextureRelease(m_shadowTexture);
+    for (WGPUTextureView view : m_momentsFaceViews) {
+        wgpuTextureViewRelease(view);
+    }
+    wgpuTextureViewRelease(m_depthView);
+    wgpuTextureRelease(m_depthTexture);
+    wgpuTextureViewRelease(m_momentsView);
+    wgpuTextureRelease(m_momentsTexture);
 }
 
 void PointLight::update(WGPUQueue queue, float time) {
@@ -254,12 +268,20 @@ void PointLight::render(
 ) {
     for (std::uint32_t face = 0; face < 6; ++face) {
         WGPURenderPassDepthStencilAttachment depth = WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
-        depth.view = m_shadowFaceViews[face];
+        WGPURenderPassColorAttachment color = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+        color.view = m_momentsFaceViews[face];
+        color.loadOp = WGPULoadOp_Clear;
+        color.storeOp = WGPUStoreOp_Store;
+        color.clearValue = {1.f, 1.f, 0.f, 0.f};
+
+        depth.view = m_depthFaceViews[face];
         depth.depthLoadOp = WGPULoadOp_Clear;
         depth.depthStoreOp = WGPUStoreOp_Store;
         depth.depthClearValue = 1.f;
 
         WGPURenderPassDescriptor descriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+        descriptor.colorAttachmentCount = 1;
+        descriptor.colorAttachments = &color;
         descriptor.depthStencilAttachment = &depth;
 
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &descriptor);
