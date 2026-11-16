@@ -101,25 +101,6 @@ WGPUSampler createShadowSampler(WGPUDevice device) {
     return wgpuDeviceCreateSampler(device, &descriptor);
 }
 
-math::matrix4f faceView(
-    math::vector3f position,
-    math::vector3f direction,
-    math::vector3f up
-) {
-    const math::vector3f z = -direction;
-    const math::vector3f x = math::normalized(math::cross(up, z));
-    const math::vector3f y = math::cross(z, x);
-
-    const math::matrix4f rotation = math::matrix4f::from_rows(
-        math::append_zero(x),
-        math::append_zero(y),
-        math::append_zero(z),
-        math::append_one(math::vector3f::zero())
-    );
-
-    return rotation * math::translation(-position);
-}
-
 WGPURenderPipeline createShadowPipeline(WGPUDevice device, WGPUShaderModule shader, WGPUBindGroupLayout uniformLayout, WGPUBindGroupLayout materialLayout) {
     WGPUBindGroupLayout layouts[] = {uniformLayout, materialLayout};
 
@@ -159,7 +140,7 @@ WGPURenderPipeline createShadowPipeline(WGPUDevice device, WGPUShaderModule shad
     descriptor.vertex.bufferCount = 1;
     descriptor.vertex.buffers = &vertexLayout;
     descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-    descriptor.primitive.cullMode = WGPUCullMode_Back;
+    descriptor.primitive.cullMode = WGPUCullMode_None;
     descriptor.fragment = &fragmentState;
     descriptor.depthStencil = &depthState;
 
@@ -227,17 +208,33 @@ void PointLight::update(WGPUQueue queue, float time) {
         math::vector3f{0.f, 0.f, -1.f},
     };
 
-    constexpr std::array upDirections {
-        math::vector3f{0.f, -1.f, 0.f},
-        math::vector3f{0.f, -1.f, 0.f},
-        math::vector3f{0.f, 0.f, 1.f},
+    constexpr std::array rightDirections {
         math::vector3f{0.f, 0.f, -1.f},
-        math::vector3f{0.f, -1.f, 0.f},
-        math::vector3f{0.f, -1.f, 0.f},
+        math::vector3f{0.f, 0.f, 1.f},
+        math::vector3f{1.f, 0.f, 0.f},
+        math::vector3f{1.f, 0.f, 0.f},
+        math::vector3f{1.f, 0.f, 0.f},
+        math::vector3f{-1.f, 0.f, 0.f},
+    };
+
+    constexpr std::array upDirections {
+        math::vector3f{0.f, 1.f, 0.f},
+        math::vector3f{0.f, 1.f, 0.f},
+        math::vector3f{0.f, 0.f, -1.f},
+        math::vector3f{0.f, 0.f, 1.f},
+        math::vector3f{0.f, 1.f, 0.f},
+        math::vector3f{0.f, 1.f, 0.f},
     };
 
     for (std::uint32_t face = 0; face < 6; ++face) {
-        m_shadowMatrices[face] = projection * faceView(m_position, directions[face], upDirections[face]);
+        const math::matrix4f rotation = math::matrix4f::from_rows(
+            math::append_zero(rightDirections[face]),
+            math::append_zero(upDirections[face]),
+            math::append_zero(-directions[face]),
+            math::append_one(math::vector3f::zero())
+        );
+
+        m_shadowMatrices[face] = projection * rotation * math::translation(-m_position);
     }
 
     PointLightUniforms const uniforms{

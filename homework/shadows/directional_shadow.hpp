@@ -12,7 +12,7 @@ public:
         WGPUDevice device,
         const std::filesystem::path& shaderPath,
         WGPUBindGroupLayout materialLayout,
-        std::uint32_t size = 2048
+        std::uint32_t size
     );
     ~DirectionalShadow();
 

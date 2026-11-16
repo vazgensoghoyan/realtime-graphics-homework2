@@ -292,7 +292,7 @@ int main(int argc, char **argv) try {
         app.device(),
         projectRoot / "shadows/shadow_shader.wgsl",
         materialBindGroupLayout,
-        4096
+        2048
     );
 
     LightMarker lightMarker(
@@ -305,7 +305,9 @@ int main(int argc, char **argv) try {
     PointLight pointLight(
         app.device(),
         projectRoot / "point_light/point_shadow.wgsl",
-        materialBindGroupLayout
+        materialBindGroupLayout,
+        {0.1f, 0.05f, 0.025f},
+        1024
     );
 
     WGPUShaderModule shaderModule = createShaderModule(app.device(), projectRoot / "shader.wgsl");

@@ -14,8 +14,8 @@ public:
         WGPUDevice device,
         const std::filesystem::path& shaderPath,
         WGPUBindGroupLayout materialLayout,
-        math::vector3f intensity = {0.4f, 0.2f, 0.1f},
-        std::uint32_t shadowSize = 1024
+        math::vector3f intensity,
+        std::uint32_t shadowSize
     );
     ~PointLight();
 
