@@ -431,16 +431,25 @@ int main(int argc, char **argv) try {
         if (!paused) time += dt;
         lastFrameStart = now;
 
+        float aspectRatio = app.width() * 1.f / app.height();
+
         camera.update(dt);
 
         math::matrix4f const view = camera.viewMatrix();
-        math::matrix4f const projection = camera.projectionMatrix(app.width() * 1.f / app.height());
+        math::matrix4f const projection = camera.projectionMatrix(aspectRatio);
 
         math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
 
         pointLight.update(app.queue(), time);
 
-        shadow.update(lightDirection, model, scene.bounds);
+        auto cameraFrustumCorners = camera.frustumCorners(aspectRatio);
+
+        shadow.update(
+            lightDirection,
+            model,
+            scene.bounds,
+            cameraFrustumCorners
+        );
 
         CameraUniforms const cameraUniforms {
             .viewProjectionTranspose = math::transpose(projection * view),

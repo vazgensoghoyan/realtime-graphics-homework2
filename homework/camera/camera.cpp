@@ -4,6 +4,8 @@
 #include <math/projection.hpp>
 #include <math/utils.hpp>
 
+#include <cmath>
+
 void Camera::handleEvent(const SDL_Event& event) {
     switch (event.type) {
     case SDL_EVENT_KEY_DOWN:
@@ -23,12 +25,7 @@ void Camera::handleEvent(const SDL_Event& event) {
 void Camera::update(float dt) {
     const float step = (m_keydown.contains(SDLK_LSHIFT) ? s_fastSpeed : s_speed) * dt;
 
-    const math::vector3f forward{
-        std::sin(m_yaw) * std::cos(m_pitch),
-        std::sin(m_pitch),
-        -std::cos(m_yaw) * std::cos(m_pitch),
-    };
-    const math::vector3f right{std::cos(m_yaw), 0.f, std::sin(m_yaw)};
+    auto [forward, right, _] = cameraBasis();
 
     math::vector3f direction{};
     if (m_keydown.contains(SDLK_W)) direction += forward;
@@ -48,5 +45,46 @@ math::matrix4f Camera::viewMatrix() const {
 }
 
 math::matrix4f Camera::projectionMatrix(float aspectRatio) const {
-    return math::perspective(std::numbers::pi_v<float> / 3.f, aspectRatio, 0.01f, 300.f);
+    return math::perspective(fovY, aspectRatio, 0.01f, 300.f);
+}
+
+std::array<math::vector3f, 8> Camera::frustumCorners(float aspectRatio) const {
+    auto [forward, right, up] = cameraBasis();
+
+    float nearDistance = 0.01f;
+    float farDistance = 300.0f;
+
+    float halfNearHeight = std::tan(fovY / 2.0f) * nearDistance;
+    float halfNearWidth = halfNearHeight * aspectRatio;
+    float halfFarHeight = std::tan(fovY / 2.0f) * farDistance;
+    float halfFarWidth = halfFarHeight * aspectRatio;
+
+    auto nearCenter = m_position + forward * nearDistance;
+    auto farCenter = m_position + forward * farDistance;
+
+    return {
+        nearCenter + up * halfNearHeight - right * halfNearWidth,
+        nearCenter + up * halfNearHeight + right * halfNearWidth,
+        nearCenter - up * halfNearHeight - right * halfNearWidth,
+        nearCenter - up * halfNearHeight + right * halfNearWidth,
+        farCenter + up * halfFarHeight - right * halfFarWidth,
+        farCenter + up * halfFarHeight + right * halfFarWidth,
+        farCenter - up * halfFarHeight - right * halfFarWidth,
+        farCenter - up * halfFarHeight + right * halfFarWidth,
+    };
+}
+
+std::array<math::vector3f, 3> Camera::cameraBasis() const {
+    math::vector3f forward{
+        std::sin(m_yaw) * std::cos(m_pitch),
+        std::sin(m_pitch),
+        -std::cos(m_yaw) * std::cos(m_pitch),
+    };
+    math::vector3f right{
+        std::cos(m_yaw),
+        0.f,
+        std::sin(m_yaw)
+    };
+    math::vector3f up = math::cross(right, forward);
+    return {forward, right, up};
 }

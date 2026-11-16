@@ -158,10 +158,24 @@ DirectionalShadow::~DirectionalShadow() {
 void DirectionalShadow::update(
     math::vector3f lightDirection,
     math::matrix4f model,
-    math::box3f sceneBounds
+    math::box3f sceneBounds,
+    const std::array<math::vector3f, 8>& cameraFrustumCorners
 ) {
+    auto worldSceneBounds = transformBounds(model, sceneBounds);
+    auto frustumBounds = math::box3f::null();
+
+    for (const auto& corner : cameraFrustumCorners) {
+        frustumBounds |= corner;
+    }
+
+    auto visibleBounds = worldSceneBounds & frustumBounds;
+
+    if (math::empty(visibleBounds)) {
+        visibleBounds = worldSceneBounds;
+    }
+
     m_model = model;
-    m_projection = calculateProjection(lightDirection, transformBounds(model, sceneBounds));
+    m_projection = calculateProjection(lightDirection, visibleBounds);
 }
 
 void DirectionalShadow::render(

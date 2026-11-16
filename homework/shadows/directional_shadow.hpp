@@ -5,6 +5,7 @@
 #include <webgpu.h>
 
 #include <filesystem>
+#include <array>
 
 class DirectionalShadow {
 public:
@@ -19,7 +20,8 @@ public:
     void update(
         math::vector3f lightDirection,
         math::matrix4f model,
-        math::box3f sceneBounds
+        math::box3f sceneBounds,
+        const std::array<math::vector3f, 8>& cameraFrustumCorners
     );
 
     void render(
