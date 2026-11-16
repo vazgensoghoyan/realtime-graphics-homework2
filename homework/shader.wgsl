@@ -58,6 +58,7 @@ fn vertexMain(in: VertexIn) -> VertexOut {
 }
 
 const PI = 3.1415926535;
+const BIAS = 0.002;
 
 fn directionalShadow(worldPosition: vec3f) -> f32 {
     var position = lights.shadowProjection * vec4f(worldPosition, 1.0);
@@ -75,11 +76,7 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
     let uv = position.xy * vec2f(0.5, -0.5) + vec2f(0.5);
 
     let textureSize = vec2f(textureDimensions(shadowTexture));
-
-    let bias = 0.002;
-
     let texelSize = vec2f(1.0) / textureSize;
-    let currentDepth = position.z - bias;
 
     var result = 0.0;
 
@@ -87,7 +84,7 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
         for (var x = -1; x <= 1; x++) {
             let offset = vec2f(f32(x), f32(y)) * texelSize;
             let storedDepth = textureSample(shadowTexture, shadowSampler, uv + offset);
-            if (currentDepth <= storedDepth) {
+            if (position.z - BIAS <= storedDepth) {
                 result += 1.0;
             }
         }
@@ -97,21 +94,34 @@ fn directionalShadow(worldPosition: vec3f) -> f32 {
 }
 
 fn pointShadow(worldPosition: vec3f) -> f32 {
-    let direction = worldPosition - lights.pointPosition;
-    let distance = length(direction);
+    let light_to_point = worldPosition - lights.pointPosition;
+    let distance = length(light_to_point);
 
-    let currentDepth = distance / lights.pointFarPlane;
-    if (currentDepth > 1.0) {
+    if (distance >= lights.pointFarPlane || distance <= 0.0001) {
         return 1.0;
     }
 
-    let storedDepth = textureSample(pointShadowTexture, pointShadowSampler, direction);
+    let dir = light_to_point / distance;
+    let currentDepth = distance / lights.pointFarPlane;
 
-    let bias = 0.002;
-    if (currentDepth - bias > storedDepth) {
-        return 0.0;
+    let helper = select(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), abs(dir.y) > 0.9);
+    let tangent = normalize(cross(helper, dir));
+    let bitangent = cross(dir, tangent);
+    let texelAngle = 2.0 / f32(textureDimensions(pointShadowTexture).x);
+
+    var result = 0.0;
+
+    for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+            let sampleDirection = dir + texelAngle * (f32(x) * tangent + f32(y) * bitangent);
+            let storedDepth = textureSampleLevel(pointShadowTexture, pointShadowSampler, sampleDirection, 0);
+            if (currentDepth - BIAS <= storedDepth) {
+                result += 1.0;
+            }
+        }
     }
-    return 1.0;
+
+    return result / 9.0;
 }
 
 fn phongLight(
