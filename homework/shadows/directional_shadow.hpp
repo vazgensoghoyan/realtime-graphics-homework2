@@ -2,6 +2,7 @@
 
 #include <math/aliases.hpp>
 #include <obj_loader.hpp>
+#include <shadow_blur.hpp>
 #include <webgpu.h>
 
 #include <filesystem>
@@ -12,6 +13,7 @@ public:
     DirectionalShadow(
         WGPUDevice device,
         const std::filesystem::path& shaderPath,
+        const std::filesystem::path& blurShaderPath,
         WGPUBindGroupLayout materialLayout,
         std::uint32_t size
     );
@@ -42,6 +44,11 @@ private:
 
     WGPUTexture m_momentsTexture;
     WGPUTextureView m_momentsView;
+
+    WGPUTexture m_blurTexture;
+    WGPUTextureView m_blurView;
+
+    ShadowBlur m_blur;
 
     WGPUSampler m_sampler;
 

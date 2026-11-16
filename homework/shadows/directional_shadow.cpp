@@ -86,6 +86,7 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shader, WG
     descriptor.vertex.buffers = &vertexLayout;
     descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
     descriptor.primitive.cullMode = WGPUCullMode_Back;
+    descriptor.primitive.unclippedDepth = WGPU_TRUE;
     descriptor.fragment = &fragmentState;
     descriptor.depthStencil = &depthState;
 
@@ -139,6 +140,7 @@ math::matrix4f calculateProjection(
 DirectionalShadow::DirectionalShadow(
     WGPUDevice device,
     const std::filesystem::path& shaderPath,
+    const std::filesystem::path& blurShaderPath,
     WGPUBindGroupLayout materialLayout,
     std::uint32_t size
 )
@@ -146,6 +148,9 @@ DirectionalShadow::DirectionalShadow(
     , m_depthView(createView(m_depthTexture, WGPUTextureAspect_DepthOnly))
     , m_momentsTexture(createTexture(device, size, WGPUTextureFormat_RG32Float))
     , m_momentsView(createView(m_momentsTexture, WGPUTextureAspect_All))
+    , m_blurTexture(createTexture(device, size, WGPUTextureFormat_RG32Float))
+    , m_blurView(createView(m_blurTexture, WGPUTextureAspect_All))
+    , m_blur(device, blurShaderPath)
     , m_sampler(createShadowSampler(device))
     , m_shaderModule(createShaderModule(device, shaderPath))
     , m_pipeline(createPipeline(device, m_shaderModule, materialLayout))
@@ -157,6 +162,8 @@ DirectionalShadow::~DirectionalShadow() {
     wgpuSamplerRelease(m_sampler);
     wgpuTextureViewRelease(m_momentsView);
     wgpuTextureRelease(m_momentsTexture);
+    wgpuTextureViewRelease(m_blurView);
+    wgpuTextureRelease(m_blurTexture);
     wgpuTextureViewRelease(m_depthView);
     wgpuTextureRelease(m_depthTexture);
 }
@@ -229,4 +236,10 @@ void DirectionalShadow::render(
 
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
+
+    m_blur.render(
+        encoder,
+        m_momentsView,
+        m_blurView
+    );
 }

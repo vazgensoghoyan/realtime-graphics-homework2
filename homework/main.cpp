@@ -291,6 +291,7 @@ int main(int argc, char **argv) try {
     DirectionalShadow shadow(
         app.device(),
         projectRoot / "shadows/shadow_shader.wgsl",
+        projectRoot / "utils/shadow_blur.wgsl",
         materialBindGroupLayout,
         2048
     );
@@ -305,6 +306,7 @@ int main(int argc, char **argv) try {
     PointLight pointLight(
         app.device(),
         projectRoot / "point_light/point_shadow.wgsl",
+        projectRoot / "utils/shadow_blur.wgsl",
         materialBindGroupLayout,
         {0.1f, 0.05f, 0.025f},
         1024
