@@ -2,6 +2,8 @@
 
 A small WebGPU renderer for textured OBJ scenes. It demonstrates Phong lighting, a moving sun, a moving point light, and soft shadows from both lights.
 
+![Crytek Sponza rendered with the project](screenshot-sponza.png)
+
 ## Features
 
 - OBJ and MTL loading with multiple materials and submeshes
