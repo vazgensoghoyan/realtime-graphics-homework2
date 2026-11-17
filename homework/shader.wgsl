@@ -58,12 +58,12 @@ fn vertexMain(in: VertexIn) -> VertexOut {
 }
 
 const PI = 3.1415926535;
-const BIAS = 0.002;
-const LIGHT_BLEEDING = 0.2;
+const MIN_VARIANCE = 0.000001;
+const LIGHT_BLEEDING = 0.4;
 
 fn chebyshevShadow(moments: vec2f, depth: f32) -> f32 {
     let e = moments.x;
-    let d = max(moments.y - e * e, 0.00002);
+    let d = max(moments.y - e * e, MIN_VARIANCE);
     let diff = depth - e;
 
     if (depth <= e) {
@@ -138,14 +138,14 @@ fn phongLight(
     specularPower: f32
 ) -> vec3f {
     let cosine = max(dot(normal, lightDirection), 0.0);
-    let halfway = normalize(lightDirection + viewDirection);
+    let reflectedLight = reflect(-lightDirection, normal);
 
     var specular = vec3f(0.0);
 
     if (cosine > 0.0) {
         specular =
             specularFactor * (specularPower + 2.0) / (2.0 * PI)
-            * pow(max(dot(halfway, normal), 0.0), specularPower);
+            * pow(max(dot(reflectedLight, viewDirection), 0.0), specularPower);
     }
 
     return lightIntensity * (albedo * cosine + specular);
