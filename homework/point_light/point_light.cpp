@@ -197,6 +197,9 @@ PointLight::~PointLight() {
     for (WGPUTextureView view : m_momentsFaceViews) {
         wgpuTextureViewRelease(view);
     }
+    for (WGPUTextureView view : m_blurFaceViews) {
+        wgpuTextureViewRelease(view);
+    }
     wgpuTextureViewRelease(m_depthView);
     wgpuTextureRelease(m_depthTexture);
     wgpuTextureViewRelease(m_momentsView);
