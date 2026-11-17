@@ -19,7 +19,8 @@ public:
         WGPURenderPassEncoder pass,
         WGPUBindGroup cameraBindGroup,
         math::vector3f position,
-        math::vector3f color
+        math::vector3f color,
+        float scale
     );
 
 private:

@@ -8,7 +8,7 @@ struct Immediates {
     math::vector3f position;
     float padding = 0.f;
     math::vector3f color;
-    float padding2 = 0.f;
+    float scale;
 };
 
 WGPURenderPipeline createPipeline(
@@ -73,11 +73,13 @@ void LightMarker::render(
     WGPURenderPassEncoder pass,
     WGPUBindGroup cameraBindGroup,
     math::vector3f position,
-    math::vector3f color
+    math::vector3f color,
+    float scale
 ) {
     const Immediates immediates{
         .position = position,
         .color = color,
+        .scale = scale,
     };
 
     wgpuRenderPassEncoderSetPipeline(pass, m_pipeline);

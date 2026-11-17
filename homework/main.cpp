@@ -266,7 +266,7 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shaderModu
     renderPipelineDescriptor.vertex.buffers = &vertexBufferLayout;
     renderPipelineDescriptor.vertex.bufferCount = 1;
     renderPipelineDescriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-    renderPipelineDescriptor.primitive.cullMode = WGPUCullMode_Back;
+    renderPipelineDescriptor.primitive.cullMode = WGPUCullMode_None;
     renderPipelineDescriptor.fragment = &fragmentState;
     renderPipelineDescriptor.depthStencil = &depthStencilState;
 
@@ -440,7 +440,13 @@ int main(int argc, char **argv) try {
         math::matrix4f const view = camera.viewMatrix();
         math::matrix4f const projection = camera.projectionMatrix(aspectRatio);
 
-        math::vector3f const lightDirection = math::normalized(math::vector{std::cos(time * 0.1f), 1.f, std::sin(time * 0.1f)});
+        math::vector3f const lightDirection = math::normalized(
+            math::vector{
+                std::cos(time * 0.2f),
+                1.f,
+                std::sin(time * 0.2f)
+            }
+        );
 
         pointLight.update(app.queue(), time);
 
@@ -538,7 +544,18 @@ int main(int argc, char **argv) try {
             renderPass,
             cameraBindGroup,
             pointLight.position(),
-            pointLight.intensity()
+            pointLight.intensity(),
+            0.035f
+        );
+
+        constexpr float sunDistance = 8.f;
+        constexpr float sunMarkerScale = 0.35f;
+        lightMarker.render(
+            renderPass,
+            cameraBindGroup,
+            lightDirection * sunDistance,
+            {1.f, 0.85f, 0.1f},
+            sunMarkerScale
         );
 
         wgpuRenderPassEncoderEnd(renderPass);

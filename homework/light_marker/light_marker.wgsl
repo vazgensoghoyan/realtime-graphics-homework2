@@ -6,6 +6,7 @@ struct CameraUniforms {
 struct Immediates {
     position: vec3f,
     color: vec3f,
+    scale: f32,
 }
 
 struct VertexOut {
@@ -15,8 +16,6 @@ struct VertexOut {
 @group(0) @binding(0) var<uniform> camera: CameraUniforms;
 
 var<immediate> immediates: Immediates;
-
-const SCALE = 0.035;
 
 const VERTICES = array<vec3f, 6>(
     vec3f(-1.0, 0.0, 0.0),
@@ -29,7 +28,7 @@ const VERTICES = array<vec3f, 6>(
 
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOut {
-    let position = immediates.position + SCALE * VERTICES[vertexIndex];
+    let position = immediates.position + immediates.scale * VERTICES[vertexIndex];
     return VertexOut(camera.viewProjection * vec4f(position, 1.0));
 }
 

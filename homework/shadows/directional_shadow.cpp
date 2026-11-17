@@ -85,7 +85,7 @@ WGPURenderPipeline createPipeline(WGPUDevice device, WGPUShaderModule shader, WG
     descriptor.vertex.bufferCount = 1;
     descriptor.vertex.buffers = &vertexLayout;
     descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-    descriptor.primitive.cullMode = WGPUCullMode_Back;
+    descriptor.primitive.cullMode = WGPUCullMode_None;
     descriptor.primitive.unclippedDepth = WGPU_TRUE;
     descriptor.fragment = &fragmentState;
     descriptor.depthStencil = &depthState;
@@ -109,7 +109,7 @@ math::matrix4f calculateProjection(
     math::vector3f lightDirection,
     math::box3f worldBounds
 ) {
-    const math::vector3f lightZ = -lightDirection;
+    const math::vector3f lightZ = -math::normalized(lightDirection);
     const math::vector3f lightX = math::normalized(
         math::cross(lightZ, math::vector3f{0.f, 1.f, 0.f})
     );

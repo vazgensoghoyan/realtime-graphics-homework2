@@ -179,13 +179,13 @@ fn pointLight(
 }
 
 @fragment
-fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
+fn fragmentMain(in: VertexOut, @builtin(front_facing) frontFacing: bool) -> @location(0) vec4f {
     let alpha = textureSample(transparencyTexture, materialSampler, in.texcoord).r;
     if (alpha < 0.5) {
         discard;
     }
 
-    let normal = normalize(in.normal);
+    let normal = normalize(select(-in.normal, in.normal, frontFacing));
     let viewDirection = normalize(camera.position - in.worldPosition);
     let albedo = textureSample(albedoTexture, materialSampler, in.texcoord).rgb;
     let shadow = directionalShadow(in.worldPosition);

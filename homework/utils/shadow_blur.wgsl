@@ -11,11 +11,11 @@ struct Immediates {
 var<immediate> immediates: Immediates;
 
 const BLUR_WEIGHTS = array<f32, 5>(
-    0.016,
-    0.05,
-    0.12,
+    0.228,
     0.20,
-    0.228
+    0.12,
+    0.05,
+    0.016
 );
 
 @vertex
